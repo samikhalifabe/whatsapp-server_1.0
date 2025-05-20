@@ -1,0 +1,23 @@
+# Ignore the Puppeteer session directory
+session-whatsapp-api/
+
+# Ignore node_modules
+node_modules/
+
+# Ignore OS generated files
+.DS_Store
+
+# Environment variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+
+# WhatsApp session files
+.wwebjs_auth/
+.wwebjs_cache/
+
+# Config files that might contain secrets
+config/*.json
+config/*.js
