@@ -109,7 +109,7 @@ const sendMessage = async (req, res) => {
       conversationId: conversation.id
     });
   } catch (error) {
-    logger.error('Send message error:', error);
+    logger.error('Send message error:', error.message, error); // Log the error object as well
     res.status(500).json({ error: error.message });
   }
 };
