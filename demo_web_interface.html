@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulateur IA - Démo Conversation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .demo-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            width: 800px;
+            height: 600px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #25d366;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        
+        .status {
+            padding: 10px 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #dc3545;
+        }
+        
+        .dot.connected {
+            background: #28a745;
+        }
+        
+        .chat-area {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f8f9fa;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .message.user {
+            justify-content: flex-end;
+        }
+        
+        .message.ai {
+            justify-content: flex-start;
+        }
+        
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .message.user .message-bubble {
+            background: #007bff;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .message.ai .message-bubble {
+            background: white;
+            color: #333;
+            border: 1px solid #e9ecef;
+            border-bottom-left-radius: 4px;
+        }
+        
+        .message-time {
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 4px;
+            text-align: right;
+        }
+        
+        .message.ai .message-time {
+            text-align: left;
+        }
+        
+        .input-area {
+            padding: 20px;
+            background: white;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .message-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #e9ecef;
+            border-radius: 25px;
+            outline: none;
+            font-size: 14px;
+        }
+        
+        .message-input:focus {
+            border-color: #007bff;
+        }
+        
+        .send-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 45px;
+            height: 45px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        
+        .send-btn:hover {
+            background: #0056b3;
+        }
+        
+        .send-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .scenario-buttons {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #e9ecef;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .scenario-btn {
+            background: white;
+            border: 1px solid #007bff;
+            color: #007bff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .scenario-btn:hover {
+            background: #007bff;
+            color: white;
+        }
+        
+        .typing-indicator {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            color: #6c757d;
+            font-style: italic;
+            font-size: 13px;
+            margin: 10px 0;
+        }
+        
+        .typing-dots {
+            display: flex;
+            gap: 3px;
+        }
+        
+        .typing-dot {
+            width: 4px;
+            height: 4px;
+            background: #6c757d;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="header">
+            <span>🤖</span>
+            <h1>Simulateur IA - Test Conversation</h1>
+        </div>
+        
+        <div class="status">
+            <div class="status-indicator">
+                <div class="dot" id="connectionDot"></div>
+                <span id="connectionStatus">Connexion...</span>
+            </div>
+            <span>Démo conversation avec IA</span>
+        </div>
+        
+        <div class="chat-area" id="chatArea">
+            <div class="message ai">
+                <div class="message-bubble">
+                    👋 Bonjour ! Je suis l'IA de test. Envoyez-moi un message pour commencer la conversation.
+                    <div class="message-time">Maintenant</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="typing-indicator" id="typingIndicator">
+            🤖 L'IA écrit
+            <div class="typing-dots">
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+                <div class="typing-dot"></div>
+            </div>
+        </div>
+        
+        <div class="scenario-buttons">
+            <button class="scenario-btn" onclick="sendMessage('Bonjour')">👋 Saluer</button>
+            <button class="scenario-btn" onclick="sendMessage('Je suis intéressé par votre véhicule')">🚗 Intérêt</button>
+            <button class="scenario-btn" onclick="sendMessage('Quel est le prix ?')">💰 Prix</button>
+            <button class="scenario-btn" onclick="sendMessage('15000 euros ça vous va ?')">🤝 Négocier</button>
+            <button class="scenario-btn" onclick="clearChat()">🗑️ Effacer</button>
+        </div>
+        
+        <div class="input-area">
+            <input 
+                type="text" 
+                class="message-input" 
+                id="messageInput" 
+                placeholder="Tapez votre message..."
+                onkeypress="handleKeyPress(event)"
+            >
+            <button class="send-btn" id="sendBtn" onclick="sendCurrentMessage()">
+                ➤
+            </button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Connexion WebSocket
+        const socket = io('http://localhost:3001');
+        
+        let isConnected = false;
+        let isTyping = false;
+        
+        // Éléments DOM
+        const chatArea = document.getElementById('chatArea');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const connectionDot = document.getElementById('connectionDot');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const typingIndicator = document.getElementById('typingIndicator');
+        
+        // Gestion de la connexion WebSocket
+        socket.on('connect', () => {
+            isConnected = true;
+            connectionDot.classList.add('connected');
+            connectionStatus.textContent = 'Connecté';
+            sendBtn.disabled = false;
+            console.log('✅ Connecté au serveur WebSocket');
+        });
+        
+        socket.on('disconnect', () => {
+            isConnected = false;
+            connectionDot.classList.remove('connected');
+            connectionStatus.textContent = 'Déconnecté';
+            sendBtn.disabled = true;
+            console.log('❌ Déconnecté du serveur WebSocket');
+        });
+        
+        // Réception des messages
+        socket.on('new_message', (message) => {
+            console.log('📩 Nouveau message reçu:', message);
+            
+            // Masquer l'indicateur de frappe
+            hideTypingIndicator();
+            
+            if (message.from === 'demo+33123456789@c.us') {
+                // Message de l'utilisateur (démo)
+                addMessage(message.body, 'user');
+            } else if (message.from === 'me') {
+                // Réponse de l'IA
+                addMessage(message.body, 'ai');
+            }
+        });
+        
+        // Fonctions d'interface
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const now = new Date().toLocaleTimeString('fr-FR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            messageDiv.innerHTML = `
+                <div class="message-bubble">
+                    ${text}
+                    <div class="message-time">${now}</div>
+                </div>
+            `;
+            
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+        
+        function showTypingIndicator() {
+            if (!isTyping) {
+                isTyping = true;
+                typingIndicator.style.display = 'flex';
+                chatArea.scrollTop = chatArea.scrollHeight;
+            }
+        }
+        
+        function hideTypingIndicator() {
+            if (isTyping) {
+                isTyping = false;
+                typingIndicator.style.display = 'none';
+            }
+        }
+        
+        async function sendMessage(text) {
+            if (!text.trim() || !isConnected) return;
+            
+            // Afficher le message utilisateur immédiatement
+            addMessage(text, 'user');
+            
+            // Afficher l'indicateur de frappe
+            showTypingIndicator();
+            
+            try {
+                // Envoyer le message au simulateur
+                const response = await fetch('http://localhost:3001/api/simulate-message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: text })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Erreur lors de l\'envoi du message');
+                }
+                
+                console.log('✅ Message envoyé au simulateur');
+                
+            } catch (error) {
+                console.error('❌ Erreur envoi message:', error);
+                hideTypingIndicator();
+                addMessage('❌ Erreur lors de l\'envoi du message', 'ai');
+            }
+        }
+        
+        function sendCurrentMessage() {
+            const text = messageInput.value.trim();
+            if (text) {
+                sendMessage(text);
+                messageInput.value = '';
+            }
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendCurrentMessage();
+            }
+        }
+        
+        function clearChat() {
+            const messages = chatArea.querySelectorAll('.message:not(:first-child)');
+            messages.forEach(msg => msg.remove());
+        }
+        
+        // Focus sur l'input au chargement
+        window.onload = () => {
+            messageInput.focus();
+        };
+    </script>
+</body>
+</html> 

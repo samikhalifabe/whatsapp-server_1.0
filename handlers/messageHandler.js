@@ -201,6 +201,13 @@ async function handleIncomingMessage(msg, whatsappClient) {
         await new Promise(resolve => setTimeout(resolve, aiResponse.typingDelay));
         
         if (whatsappClient) {
+          // Importer la fonction pour tracker les messages IA
+          const { addApiMessage } = require('../services/whatsapp');
+          const normalizedTo = msg.from.includes('@c.us') ? msg.from : `${msg.from}@c.us`;
+          
+          // Tracker le message IA AVANT l'envoi pour éviter la détection en double
+          addApiMessage(normalizedTo, aiResponse.text);
+          
           const sentMessage = await whatsappClient.sendMessage(msg.from, aiResponse.text);
           logger.whatsapp.messageSent(msg.from, aiResponse.text);
           
@@ -233,6 +240,13 @@ async function handleIncomingMessage(msg, whatsappClient) {
         // Handle simple response (string)
         const responseText = (typeof aiResponse === 'object' && aiResponse.text) ? aiResponse.text : aiResponse;
         if (responseText && whatsappClient) {
+          // Importer la fonction pour tracker les messages IA
+          const { addApiMessage } = require('../services/whatsapp');
+          const normalizedTo = msg.from.includes('@c.us') ? msg.from : `${msg.from}@c.us`;
+          
+          // Tracker le message IA AVANT l'envoi pour éviter la détection en double
+          addApiMessage(normalizedTo, responseText);
+          
           const sentMessage = await whatsappClient.sendMessage(msg.from, responseText);
           logger.whatsapp.messageSent(msg.from, responseText);
           

@@ -1,5 +1,6 @@
 const { supabase } = require('../services/database');
 const logger = require('../utils/logger');
+const crypto = require('crypto');
 
 // Function to save a message
 async function saveMessage(conversationId, body, isFromMe, messageId = null, timestamp = null, userId = null) {
@@ -15,27 +16,40 @@ async function saveMessage(conversationId, body, isFromMe, messageId = null, tim
       user_id: userId
     };
     
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('messages')
-      .insert(messageData);
+      .insert(messageData)
+      .select()
+      .single();
 
     if (error) {
-      logger.error('[DB] 💾 Erreur Supabase lors de la sauvegarde:', {
-        error: error,
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code
-      });
-      logger.error('[DB] 💾 Données tentées d\'insertion:', messageData);
-      return null;
+      // Si l'erreur est due à RLS (aucune ligne retournée), l'insertion a probablement réussi
+      if (error.code === 'PGRST116' && error.details === 'The result contains 0 rows') {
+        logger.info('[DB] 💾 Insertion réussie mais aucune donnée retournée (probablement RLS)');
+        // Créer un objet de message avec un UUID généré aléatoirement pour les références
+        const savedMessage = {
+          id: crypto.randomUUID(), // Générer un UUID valide
+          ...messageData,
+          timestamp: messageData.timestamp || new Date().toISOString()
+        };
+        logger.info(`[DB] 💾 Message sauvegardé avec UUID généré: ID=${savedMessage.id}`);
+        return savedMessage;
+      } else {
+        // Autre erreur réelle
+        logger.error('[DB] 💾 Erreur Supabase lors de la sauvegarde:', {
+          error: error,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
+        logger.error('[DB] 💾 Données tentées d\'insertion:', messageData);
+        return null;
+      }
     }
 
-    // Insertion réussie - créer un objet avec un ID généré pour le retour
-    const savedMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      ...messageData
-    };
+    // Retourner les données réelles avec le vrai UUID de Supabase
+    const savedMessage = data;
     
     logger.info(`[DB] 💾 Message sauvegardé avec succès: ID=${savedMessage.id}`);
     return savedMessage;

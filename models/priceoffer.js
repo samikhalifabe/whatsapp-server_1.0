@@ -79,13 +79,37 @@ async function createPriceOfferInDB(conversationId, vehicleId, userId, messageId
     return null;
   }
   try {
+    // S'assurer que messageId est un UUID valide ou null
+    let validMessageId = null;
+    if (messageId && typeof messageId === 'string' && messageId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+      // Vérifier si ce message existe réellement (pour éviter les contraintes FK avec RLS)
+      const { data: messageExists } = await supabase
+        .from('messages')
+        .select('id')
+        .eq('id', messageId)
+        .single();
+      
+      if (messageExists) {
+        validMessageId = messageId;
+        logger.info(`Message ID vérifié et existe: ${messageId}`);
+      } else {
+        logger.info(`Message ID généré par RLS, ne peut pas être référencé: ${messageId}`);
+        validMessageId = null;
+      }
+    } else if (messageId && typeof messageId === 'object' && messageId.id) {
+      // Si messageId est un objet avec un id
+      validMessageId = messageId.id;
+    }
+    
+    logger.info(`Saving price offer with messageId: ${messageId} -> validMessageId: ${validMessageId}`);
+    
     const { data, error } = await supabase
       .from('price_offers')
       .insert({
         conversation_id: conversationId,
         vehicle_id: vehicleId, // Can be null if not directly linked to a vehicle at the time of the offer
         user_id: userId,
-        message_id: messageId, // ID of the message from the 'messages' table
+        message_id: validMessageId, // UUID valide ou null
         offered_price: price,
         offer_currency: currency,
         status: 'pending', // Initial status

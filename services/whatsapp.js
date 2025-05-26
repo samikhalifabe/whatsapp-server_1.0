@@ -13,7 +13,30 @@ const { handleIncomingMessage, handleOutgoingMessage } = require('../handlers/me
 
 let qrCodeData = '';
 let whatsappClient = null;
-let socketIo = null; // Store the Socket.IO instance
+let socketIo = null;
+
+// Tracker pour les messages envoyés via l'API (pour éviter la duplication)
+let recentApiMessages = [];
+
+function addApiMessage(to, body) {
+  const message = {
+    to,
+    body,
+    timestamp: Date.now()
+  };
+  recentApiMessages.push(message);
+  
+  // Nettoyer les anciens messages (garder seulement les 2 dernières minutes)
+  const twoMinutesAgo = Date.now() - (2 * 60 * 1000);
+  recentApiMessages = recentApiMessages.filter(msg => msg.timestamp > twoMinutesAgo);
+}
+
+function getRecentApiMessages() {
+  // Nettoyer les anciens messages à chaque appel
+  const twoMinutesAgo = Date.now() - (2 * 60 * 1000);
+  recentApiMessages = recentApiMessages.filter(msg => msg.timestamp > twoMinutesAgo);
+  return recentApiMessages;
+} // Store the Socket.IO instance
 
 async function initializeWhatsAppClient(io) {
   socketIo = io; // Store the Socket.IO instance
@@ -101,8 +124,22 @@ async function initializeWhatsAppClient(io) {
 
     // Si c'est un message sortant (que vous avez envoyé depuis WhatsApp Web/téléphone)
     if (msg.fromMe && msg.to !== 'status@broadcast') {
-      logger.info('Outgoing message detected from WhatsApp Web/Phone:', msg.body);
-      await handleOutgoingMessage(msg, whatsappClient);
+      // VÉRIFIER SI LE MESSAGE A ÉTÉ ENVOYÉ VIA L'API
+      // Si le message a été envoyé dans les 30 dernières secondes via sendWhatsAppMessage,
+      // alors ne pas le traiter ici pour éviter la duplication
+      const recentApiMessages = getRecentApiMessages();
+      const isFromApi = recentApiMessages.some(apiMsg => 
+        Math.abs(apiMsg.timestamp - (msg.timestamp * 1000)) < 30000 && // 30 secondes
+        apiMsg.to === msg.to &&
+        apiMsg.body === msg.body
+      );
+      
+      if (!isFromApi) {
+        logger.info('Outgoing message detected from WhatsApp Web/Phone:', msg.body);
+        await handleOutgoingMessage(msg, whatsappClient);
+      } else {
+        logger.info('Outgoing message ignored (sent via API):', msg.body);
+      }
     }
     // Les messages entrants sont déjà gérés par l'événement 'message'
   });
@@ -127,6 +164,10 @@ async function sendWhatsAppMessage(to, message, vehicleId, userId) {
   const chatId = normalizePhoneNumber(to).includes('@c.us') ? normalizePhoneNumber(to) : `${normalizePhoneNumber(to)}@c.us`;
 
   logger.info(`Attempting to send message to ${chatId}: "${message}"`);
+  
+  // Enregistrer le message dans le tracker AVANT l'envoi
+  addApiMessage(chatId, message);
+  
   // Send the message via WhatsApp
   const sentMessage = await whatsappClient.sendMessage(chatId, message);
   logger.info('Message sent via WhatsApp client. Result:', sentMessage);
@@ -157,5 +198,7 @@ module.exports = {
   getQRCode,
   getWhatsAppStatus,
   sendWhatsAppMessage,
+  addApiMessage,
+  getRecentApiMessages
   // handleIncomingMessage // Will be exported or called internally later
 };
