@@ -146,6 +146,50 @@ async function handleIncomingMessage(msg, whatsappClient) {
 
     logger.ai.info(`Décision IA: état=${newState}, shouldRespond=${aiShouldRespondBasedOnConfig}, final=${shouldAIRespondNow}`);
 
+    // Retrieve vehicle information for incoming message WebSocket emission
+    let vehicle = null;
+    if (currentVehicleId) {
+      const { data: vehicleData } = await supabase
+        .from('vehicles')
+        .select('id, brand, model, year, image_url')
+        .eq('id', currentVehicleId)
+        .single();
+      vehicle = vehicleData;
+    }
+
+    // Create formatted message object for the incoming message
+    const formattedMessage = {
+      id: savedMessage?.id,
+      message_id: msg.id._serialized,
+      from: msg.from,
+      to: 'me',
+      body: msg.body,
+      timestamp: new Date(msg.timestamp * 1000).getTime() / 1000,
+      isFromMe: false,
+      chatName: vehicle ? `${vehicle.brand} ${vehicle.model}` : 'Chat sans nom',
+      chatId: initialConversation.chat_id || conversationId,
+      conversation_id: conversationId,
+      vehicle: vehicle
+    };
+
+    // *** ÉMISSION IMMÉDIATE DU MESSAGE ENTRANT VIA WEBSOCKET ***
+    // Ceci doit être fait AVANT le traitement IA pour éviter les retards
+    if (io) {
+      logger.info(`[WEBSOCKET] Émission message entrant: ${JSON.stringify({
+        id: formattedMessage.id,
+        from: formattedMessage.from,
+        body: formattedMessage.body,
+        conversation_id: formattedMessage.conversation_id
+      }, null, 2)}`);
+      logger.info(`[WEBSOCKET] Clients connectés: ${io.engine.clientsCount}`);
+      
+      io.emit('new_message', formattedMessage);
+      logger.websocket.info(`Message entrant émis via WebSocket: ${msg.from} -> "${msg.body}"`);
+    } else {
+      logger.websocket.warn('Socket.IO non disponible');
+    }
+
+    // Maintenant traiter la réponse IA (avec délai si nécessaire)
     if (shouldAIRespondNow) {
       logger.ai.info('Déclenchement réponse automatique');
       
@@ -181,7 +225,7 @@ async function handleIncomingMessage(msg, whatsappClient) {
                 vehicle: null
               };
               io.emit('new_message', formattedAiMessage);
-              logger.websocket.emit('new_message', 'Réponse IA envoyée');
+              logger.websocket.info('Réponse IA émise via WebSocket');
             }
           }
         }
@@ -212,45 +256,11 @@ async function handleIncomingMessage(msg, whatsappClient) {
                 vehicle: null
               };
               io.emit('new_message', formattedAiMessage);
-              logger.websocket.emit('new_message', 'Réponse IA simple envoyée');
+              logger.websocket.info('Réponse IA simple émise via WebSocket');
             }
           }
         }
       }
-    }
-
-    // Retrieve vehicle information for incoming message WebSocket emission
-    let vehicle = null;
-    if (currentVehicleId) {
-      const { data: vehicleData } = await supabase
-        .from('vehicles')
-        .select('id, brand, model, year, image_url')
-        .eq('id', currentVehicleId)
-        .single();
-      vehicle = vehicleData;
-    }
-
-    // Create formatted message object for the incoming message
-    const formattedMessage = {
-      id: savedMessage?.id,
-      message_id: msg.id._serialized,
-      from: msg.from,
-      to: 'me',
-      body: msg.body,
-      timestamp: new Date(msg.timestamp * 1000).getTime() / 1000,
-      isFromMe: false,
-      chatName: vehicle ? `${vehicle.brand} ${vehicle.model}` : 'Chat sans nom',
-      chatId: initialConversation.chat_id || conversationId,
-      conversation_id: conversationId,
-      vehicle: vehicle
-    };
-
-    // Emit the incoming message via WebSocket
-    if (io) {
-      io.emit('new_message', formattedMessage);
-      logger.websocket.emit('new_message', `Message entrant de ${msg.from}`);
-    } else {
-      logger.websocket.warn('Socket.IO non disponible');
     }
 
   } catch (error) {

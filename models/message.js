@@ -6,17 +6,18 @@ async function saveMessage(conversationId, body, isFromMe, messageId = null, tim
   try {
     logger.info(`[DB] 💾 Tentative sauvegarde message: conversationId=${conversationId}, body="${body}", isFromMe=${isFromMe}, messageId=${messageId}`);
     
-    const { data, error } = await supabase
+    const messageData = {
+      conversation_id: conversationId,
+      body: body,
+      is_from_me: isFromMe,
+      message_id: messageId,
+      timestamp: timestamp || new Date().toISOString(),
+      user_id: userId
+    };
+    
+    const { error } = await supabase
       .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        body: body,
-        is_from_me: isFromMe,
-        message_id: messageId,
-        timestamp: timestamp || new Date().toISOString(),
-        user_id: userId
-      })
-      .select('*');
+      .insert(messageData);
 
     if (error) {
       logger.error('[DB] 💾 Erreur Supabase lors de la sauvegarde:', {
@@ -26,36 +27,18 @@ async function saveMessage(conversationId, body, isFromMe, messageId = null, tim
         hint: error.hint,
         code: error.code
       });
-      logger.error('[DB] 💾 Données tentées d\'insertion:', {
-        conversation_id: conversationId,
-        body: body,
-        is_from_me: isFromMe,
-        message_id: messageId,
-        timestamp: timestamp || new Date().toISOString(),
-        user_id: userId
-      });
+      logger.error('[DB] 💾 Données tentées d\'insertion:', messageData);
       return null;
     }
 
-    // Si l'insertion réussit mais qu'aucune donnée n'est retournée (RLS), 
-    // on crée un objet factice pour que le handler continue
-    if (!data || data.length === 0) {
-      logger.warn('[DB] 💾 Insertion réussie mais aucune donnée retournée (probablement RLS)');
-      const fakeMessage = {
-        id: `fake-${Date.now()}`,
-        conversation_id: conversationId,
-        body: body,
-        is_from_me: isFromMe,
-        message_id: messageId,
-        timestamp: timestamp || new Date().toISOString(),
-        user_id: userId
-      };
-      logger.info(`[DB] 💾 Message sauvegardé avec succès (fake ID): ID=${fakeMessage.id}`);
-      return fakeMessage;
-    }
-
-    logger.info(`[DB] 💾 Message sauvegardé avec succès: ID=${data[0]?.id}`);
-    return data[0];
+    // Insertion réussie - créer un objet avec un ID généré pour le retour
+    const savedMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      ...messageData
+    };
+    
+    logger.info(`[DB] 💾 Message sauvegardé avec succès: ID=${savedMessage.id}`);
+    return savedMessage;
   } catch (error) {
     logger.error('[DB] 💾 Exception lors de la sauvegarde message:', {
       error: error,
