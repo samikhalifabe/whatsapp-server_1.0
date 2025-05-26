@@ -12,8 +12,7 @@ let currentAiConfig = { ...defaultAiConfig }; // Start with defaults
 // Function to load AI configuration from the database
 async function loadAIConfigFromDB() {
   try {
-    logger.info('Chargement de la configuration IA depuis Supabase...');
-    // supabase is now imported at the top
+    logger.ai.config('chargement depuis Supabase');
 
     // Add a log to check the supabase object
     logger.debug('Supabase client object in loadAIConfigFromDB:', supabase ? 'Defined' : 'Undefined', typeof supabase);
@@ -36,7 +35,7 @@ async function loadAIConfigFromDB() {
       .single();
 
     if (error || !data) {
-      if (error) logger.error('Erreur lors du chargement de la configuration IA active:', error.message);
+      if (error) logger.ai.error('Configuration active non trouvée:', error.message);
 
       const { data: latestConfig, error: latestError } = await supabase
         .from('ai_config')
@@ -46,18 +45,18 @@ async function loadAIConfigFromDB() {
         .single();
 
       if (latestError || !latestConfig) {
-        if (latestError) logger.error('Erreur lors du chargement de la dernière configuration IA:', latestError.message);
-        logger.info('Aucune configuration IA trouvée dans la DB, utilisation des valeurs par défaut et sauvegarde.');
+        if (latestError) logger.ai.error('Dernière configuration non trouvée:', latestError.message);
+        logger.ai.config('utilisation des valeurs par défaut');
         // currentAiConfig already holds defaults, so save it.
         // Ensure typingDelays is sanitized before saving, though it should be by definition.
         currentAiConfig.typingDelays = sanitizeTypingDelays(currentAiConfig.typingDelays, false);
         await saveAIConfigToDB(currentAiConfig);
         return;
       }
-      logger.info('Configuration active non trouvée, utilisation de la plus récente de la DB.');
+      logger.ai.config('utilisation de la plus récente');
       configToUse = latestConfig;
     } else {
-      logger.info('Configuration IA active chargée avec succès depuis la DB.');
+      logger.ai.config('chargée avec succès');
       configToUse = data;
     }
 
@@ -70,10 +69,10 @@ async function loadAIConfigFromDB() {
       unavailabilityKeywords: Array.isArray(configToUse.unavailability_keywords) ? configToUse.unavailability_keywords : defaultAiConfig.unavailabilityKeywords,
       pauseBotOnPriceOffer: typeof configToUse.pause_bot_on_price_offer === 'boolean' ? configToUse.pause_bot_on_price_offer : defaultAiConfig.pauseBotOnPriceOffer
     };
-    logger.info('Configuration IA appliquée:', JSON.stringify(currentAiConfig, null, 2));
+    logger.ai.config('appliquée');
 
   } catch (err) {
-    logger.error('Exception majeure lors du chargement de la configuration IA:', err);
+    logger.ai.error('Exception lors du chargement:', err);
     // Fallback to initial defaultAiConfig if all else fails
     currentAiConfig = { ...defaultAiConfig };
     currentAiConfig.typingDelays = sanitizeTypingDelays(currentAiConfig.typingDelays, false); // Ensure defaults are sanitized
@@ -85,6 +84,7 @@ async function loadAIConfigFromDB() {
 // Assumes input `config` has `typingDelays` with values in milliseconds
 async function saveAIConfigToDB(config) {
   try {
+    logger.ai.config('sauvegarde en cours');
     logger.info('Sauvegarde de la configuration IA dans Supabase:', JSON.stringify(config, null, 2));
     // supabase is now imported at the top
 
@@ -120,14 +120,14 @@ async function saveAIConfigToDB(config) {
       .insert(dbConfig);
 
     if (error) {
-      logger.error('Erreur lors de la sauvegarde de la configuration IA:', error);
+      logger.ai.error('Erreur lors de la sauvegarde:', error);
       return false;
     }
 
-    logger.info('Configuration IA sauvegardée avec succès');
+    logger.ai.config('sauvegardée avec succès');
     return true;
   } catch (error) {
-    logger.error('Exception lors de la sauvegarde de la configuration IA:', error);
+    logger.ai.error('Exception lors de la sauvegarde:', error);
     return false;
   }
 }
@@ -165,20 +165,19 @@ async function generateAIResponse(message) {
 
 // Improved function to generate a response with history and typing delay
 async function generateAIResponseWithHistory(from, message) {
-  // Check if AI is enabled before attempting to generate a response
   if (!currentAiConfig.enabled) {
-      logger.warn('AI is disabled. Skipping response generation with history.');
-       return currentAiConfig.typingDelays && currentAiConfig.typingDelays.enabled
-        ? {
-            text: "Désolé, le service IA n'est pas disponible pour le moment. Un conseiller humain vous répondra bientôt.",
-            typingDelay: currentAiConfig.typingDelays.minDelay,
-            showTypingIndicator: currentAiConfig.typingDelays.showTypingIndicator
-          }
-        : "Désolé, je n'ai pas pu traiter votre demande. Un conseiller humain vous répondra bientôt.";
+    logger.ai.warn('IA désactivée, réponse ignorée');
+    return currentAiConfig.typingDelays && currentAiConfig.typingDelays.enabled
+      ? {
+          text: "Désolé, le service IA n'est pas disponible pour le moment. Un conseiller humain vous répondra bientôt.",
+          typingDelay: currentAiConfig.typingDelays.minDelay,
+          showTypingIndicator: currentAiConfig.typingDelays.showTypingIndicator
+        }
+      : "Désolé, je n'ai pas pu traiter votre demande. Un conseiller humain vous répondra bientôt.";
   }
 
   try {
-    logger.info(`🤖 Generating AI response for: ${message}`);
+    logger.ai.generating(message);
 
     // Retrieve or initialize history for this contact
     if (!conversationHistory.has(from)) {
@@ -219,7 +218,7 @@ async function generateAIResponseWithHistory(from, message) {
 
     const aiResponse = completion.choices[0].message.content;
 
-    logger.info(`📥 Response received from OpenAI: ${aiResponse}`);
+    logger.ai.response(aiResponse);
 
     // Add the response to history
     history.push({
@@ -260,7 +259,7 @@ async function generateAIResponseWithHistory(from, message) {
     // If delays are disabled, return just the response
     return aiResponse;
   } catch (error) {
-    logger.error('❌ Error generating AI response:', error);
+    logger.ai.error('Erreur lors de la génération:', error);
     return currentAiConfig.typingDelays && currentAiConfig.typingDelays.enabled
       ? {
           text: "Désolé, je n'ai pas pu traiter votre demande. Un conseiller humain vous répondra bientôt.",
