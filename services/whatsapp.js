@@ -9,7 +9,7 @@ const { getPuppeteerOptions, getSessionDirectory } = require('../config/puppetee
 // const { shouldAutoRespond, generateAIResponseWithHistory } = require('./aiResponse');
 const { normalizePhoneNumber } = require('../utils/phoneNumber');
 const logger = require('../utils/logger');
-const { handleIncomingMessage } = require('../handlers/messageHandler'); // Import the new handler
+const { handleIncomingMessage, handleOutgoingMessage } = require('../handlers/messageHandler'); // Import the new handler
 
 let qrCodeData = '';
 let whatsappClient = null;
@@ -86,11 +86,25 @@ async function initializeWhatsAppClient(io) {
       // client.initialize(); // Auto-reconnect attempt
   });
 
-
   // Gestionnaire de messages entrants
   whatsappClient.on('message', async (msg) => {
     // Call the dedicated message handler, passing the client instance
     await handleIncomingMessage(msg, whatsappClient);
+  });
+
+  // Gestionnaire pour TOUS les messages (entrants ET sortants)
+  whatsappClient.on('message_create', async (msg) => {
+    // Ignorer les messages de statut et les messages système
+    if (msg.type === 'e2e_notification' || msg.type === 'notification_template') {
+      return;
+    }
+
+    // Si c'est un message sortant (que vous avez envoyé depuis WhatsApp Web/téléphone)
+    if (msg.fromMe && msg.to !== 'status@broadcast') {
+      logger.info('Outgoing message detected from WhatsApp Web/Phone:', msg.body);
+      await handleOutgoingMessage(msg, whatsappClient);
+    }
+    // Les messages entrants sont déjà gérés par l'événement 'message'
   });
 
   // Initialiser le client
