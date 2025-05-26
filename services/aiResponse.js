@@ -178,7 +178,7 @@ async function generateAIResponseWithHistory(from, message) {
   }
 
   try {
-    logger.info(`🤖 Generating AI response for: ${message.substring(0, 50)}...`);
+    logger.info(`🤖 Generating AI response for: ${message}`);
 
     // Retrieve or initialize history for this contact
     if (!conversationHistory.has(from)) {
@@ -219,7 +219,7 @@ async function generateAIResponseWithHistory(from, message) {
 
     const aiResponse = completion.choices[0].message.content;
 
-    logger.info(`📥 Response received from OpenAI: ${aiResponse.substring(0, 50)}...`);
+    logger.info(`📥 Response received from OpenAI: ${aiResponse}`);
 
     // Add the response to history
     history.push({

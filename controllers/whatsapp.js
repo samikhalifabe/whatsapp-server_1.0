@@ -466,6 +466,259 @@ const getAllWhatsAppConversations = async (req, res) => {
   }
 };
 
+// Nouvelle fonction pour synchroniser l'historique des messages d'une conversation
+const syncConversationHistory = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const whatsappClient = require('../services/whatsapp').getWhatsAppClient();
+    const { supabase } = require('../services/database');
+    const { saveMessage } = require('../models/message');
+
+    if (!whatsappClient || !whatsappClient.info) {
+      return res.status(503).json({
+        error: 'WhatsApp client is not connected',
+        status: 'disconnected'
+      });
+    }
+
+    // Récupérer les informations de la conversation depuis la DB
+    const { data: conversation, error: convError } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('id', conversationId)
+      .single();
+
+    if (convError || !conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    logger.info(`Synchronizing history for conversation ${conversationId} (${conversation.phone_number})`);
+
+    // Trouver le chat WhatsApp correspondant
+    const chats = await whatsappClient.getChats();
+    const targetChat = chats.find(chat => {
+      const chatNumber = chat.id._serialized.replace('@c.us', '');
+      const conversationNumber = conversation.phone_number.replace('@c.us', '');
+      return chatNumber === conversationNumber;
+    });
+
+    if (!targetChat) {
+      return res.status(404).json({ error: 'WhatsApp chat not found for this conversation' });
+    }
+
+    // Récupérer tous les messages de ce chat
+    logger.info('Fetching messages from WhatsApp...');
+    const messages = await targetChat.fetchMessages({ limit: 999999 });
+    logger.info(`${messages.length} messages found in WhatsApp`);
+
+    // Récupérer les messages existants dans la DB pour éviter les doublons
+    const { data: existingMessages } = await supabase
+      .from('messages')
+      .select('message_id')
+      .eq('conversation_id', conversationId);
+
+    const existingMessageIds = new Set(existingMessages?.map(m => m.message_id) || []);
+
+    let newMessagesSaved = 0;
+    let skippedMessages = 0;
+
+    // Sauvegarder chaque message qui n'existe pas déjà
+    for (const msg of messages) {
+      const messageId = msg.id._serialized;
+      
+      if (existingMessageIds.has(messageId)) {
+        skippedMessages++;
+        continue;
+      }
+
+      try {
+        const savedMessage = await saveMessage(
+          conversationId,
+          msg.body,
+          msg.fromMe,
+          messageId,
+          new Date(msg.timestamp * 1000).toISOString(),
+          conversation.user_id
+        );
+
+        if (savedMessage) {
+          newMessagesSaved++;
+        }
+      } catch (err) {
+        logger.error(`Error saving message ${messageId}:`, err);
+      }
+    }
+
+    // Mettre à jour la date du dernier message
+    if (messages.length > 0) {
+      const latestMessage = messages.reduce((latest, msg) => 
+        msg.timestamp > latest.timestamp ? msg : latest
+      );
+      
+      await supabase
+        .from('conversations')
+        .update({ last_message_at: new Date(latestMessage.timestamp * 1000).toISOString() })
+        .eq('id', conversationId);
+    }
+
+    logger.info(`Synchronization complete: ${newMessagesSaved} new messages saved, ${skippedMessages} skipped`);
+
+    res.json({
+      success: true,
+      conversationId,
+      totalMessages: messages.length,
+      newMessagesSaved,
+      skippedMessages,
+      message: `Synchronization complete for conversation ${conversationId}`
+    });
+
+  } catch (error) {
+    logger.error('Error synchronizing conversation history:', error);
+    res.status(500).json({
+      error: 'Server error during synchronization',
+      details: error.message
+    });
+  }
+};
+
+// Nouvelle fonction pour synchroniser l'historique de toutes les conversations
+const syncAllConversationsHistory = async (req, res) => {
+  try {
+    const whatsappClient = require('../services/whatsapp').getWhatsAppClient();
+    const { supabase } = require('../services/database');
+    const { saveMessage } = require('../models/message');
+
+    if (!whatsappClient || !whatsappClient.info) {
+      return res.status(503).json({
+        error: 'WhatsApp client is not connected',
+        status: 'disconnected'
+      });
+    }
+
+    logger.info('Starting synchronization of all conversations...');
+
+    // Récupérer toutes les conversations de la DB
+    const { data: conversations, error: convError } = await supabase
+      .from('conversations')
+      .select('*')
+      .order('last_message_at', { ascending: false })
+      .limit(200); // Augmenter à 200 conversations pour couvrir plus de pages
+
+    if (convError) {
+      return res.status(500).json({ error: 'Error fetching conversations from database' });
+    }
+
+    logger.info(`Found ${conversations.length} conversations to sync`);
+
+    // Récupérer tous les chats WhatsApp
+    const chats = await whatsappClient.getChats();
+    
+    let totalNewMessages = 0;
+    let conversationsSynced = 0;
+    const syncResults = [];
+
+    // Pour chaque conversation dans la DB
+    for (const conversation of conversations) {
+      try {
+        // Trouver le chat WhatsApp correspondant
+        const targetChat = chats.find(chat => {
+          const chatNumber = chat.id._serialized.replace('@c.us', '');
+          const conversationNumber = conversation.phone_number.replace('@c.us', '');
+          return chatNumber === conversationNumber;
+        });
+
+        if (!targetChat) {
+          logger.warn(`WhatsApp chat not found for conversation ${conversation.id} (${conversation.phone_number})`);
+          continue;
+        }
+
+        // Récupérer les messages de ce chat
+        const messages = await targetChat.fetchMessages({ limit: 100 }); // Limiter à 100 messages par conversation
+
+        // Récupérer les messages existants dans la DB pour éviter les doublons
+        const { data: existingMessages } = await supabase
+          .from('messages')
+          .select('message_id')
+          .eq('conversation_id', conversation.id);
+
+        const existingMessageIds = new Set(existingMessages?.map(m => m.message_id) || []);
+
+        let newMessagesForThisConv = 0;
+
+        // Sauvegarder chaque message qui n'existe pas déjà
+        for (const msg of messages) {
+          const messageId = msg.id._serialized;
+          
+          if (existingMessageIds.has(messageId)) {
+            continue;
+          }
+
+          try {
+            const savedMessage = await saveMessage(
+              conversation.id,
+              msg.body,
+              msg.fromMe,
+              messageId,
+              new Date(msg.timestamp * 1000).toISOString(),
+              conversation.user_id
+            );
+
+            if (savedMessage) {
+              newMessagesForThisConv++;
+              totalNewMessages++;
+            }
+          } catch (err) {
+            logger.error(`Error saving message ${messageId}:`, err);
+          }
+        }
+
+        // Mettre à jour la date du dernier message si nécessaire
+        if (messages.length > 0) {
+          const latestMessage = messages.reduce((latest, msg) => 
+            msg.timestamp > latest.timestamp ? msg : latest
+          );
+          
+          await supabase
+            .from('conversations')
+            .update({ last_message_at: new Date(latestMessage.timestamp * 1000).toISOString() })
+            .eq('id', conversation.id);
+        }
+
+        if (newMessagesForThisConv > 0) {
+          conversationsSynced++;
+          syncResults.push({
+            conversationId: conversation.id,
+            phoneNumber: conversation.phone_number,
+            newMessages: newMessagesForThisConv
+          });
+        }
+
+        logger.info(`Conversation ${conversation.id}: ${newMessagesForThisConv} new messages synced`);
+
+      } catch (err) {
+        logger.error(`Error syncing conversation ${conversation.id}:`, err);
+      }
+    }
+
+    logger.info(`Synchronization complete: ${totalNewMessages} total new messages synced across ${conversationsSynced} conversations`);
+
+    res.json({
+      success: true,
+      totalNewMessages,
+      conversationsSynced,
+      totalConversationsChecked: conversations.length,
+      syncResults,
+      message: `Synchronization complete: ${totalNewMessages} new messages synced`
+    });
+
+  } catch (error) {
+    logger.error('Error synchronizing all conversations history:', error);
+    res.status(500).json({
+      error: 'Server error during bulk synchronization',
+      details: error.message
+    });
+  }
+};
 
 module.exports = {
   getStatus,
@@ -474,4 +727,6 @@ module.exports = {
   getRecentMessages,
   updateContactedVehicles,
   getAllWhatsAppConversations,
+  syncConversationHistory,
+  syncAllConversationsHistory,
 };

@@ -316,6 +316,100 @@ async function handleIncomingMessage(msg, whatsappClient) {
   }
 }
 
+// Function to handle outgoing messages (sent from WhatsApp Web/Phone)
+async function handleOutgoingMessage(msg, whatsappClient) {
+  logger.info('Outgoing message detected:', msg.body);
+  logger.info('To:', msg.to);
+
+  try {
+    // Find or create the conversation
+    const initialConversation = await findOrCreateConversation(msg.to);
+    if (!initialConversation) {
+      logger.error('Could not find or create a conversation for:', msg.to);
+      return;
+    }
+
+    // Retrieve the current conversation info
+    const { data: currentConversationData, error: stateFetchError } = await supabase
+        .from('conversations')
+        .select('id, state, vehicle_id, user_id')
+        .eq('id', initialConversation.id)
+        .single();
+
+    if (stateFetchError || !currentConversationData) {
+        logger.error(`Error fetching conversation ${initialConversation.id}:`, stateFetchError);
+        return;
+    }
+
+    const conversationId = currentConversationData.id;
+    const currentUserId = currentConversationData.user_id;
+    const currentVehicleId = currentConversationData.vehicle_id;
+
+    // Save the outgoing message
+    const savedMessage = await saveMessage(
+      conversationId,
+      msg.body,
+      true, // isFromMe
+      msg.id._serialized,
+      new Date(msg.timestamp * 1000).toISOString(),
+      currentUserId
+    );
+
+    if (!savedMessage) {
+      logger.error('Error storing outgoing message.');
+      return;
+    }
+
+    logger.info('Outgoing message stored successfully in messages table (ID:', savedMessage.id, ')');
+
+    // Update the last message date for the conversation
+    await supabase
+      .from('conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', conversationId);
+
+    // Retrieve vehicle information if available
+    let vehicle = null;
+    if (currentVehicleId) {
+      const { data: vehicleData } = await supabase
+        .from('vehicles')
+        .select('id, brand, model, year, image_url')
+        .eq('id', currentVehicleId)
+        .single();
+      vehicle = vehicleData;
+    }
+
+    // Create a formatted message object for the client
+    const formattedMessage = {
+      id: savedMessage.id,
+      message_id: msg.id._serialized,
+      from: 'me',
+      to: msg.to,
+      body: msg.body,
+      timestamp: new Date(msg.timestamp * 1000).getTime() / 1000,
+      isFromMe: true,
+      chatName: vehicle ? `${vehicle.brand} ${vehicle.model}` : 'Chat sans nom',
+      chatId: initialConversation.chat_id || conversationId,
+      conversation_id: conversationId,
+      vehicle: vehicle
+    };
+
+    // Emit the new message event to all connected clients
+    logger.info('WebSocket Emission - Outgoing Message from WhatsApp Web/Phone:', JSON.stringify(formattedMessage, null, 2));
+    if (io) {
+        logger.info('Connected WebSocket clients:', io.engine.clientsCount);
+        io.emit('new_message', formattedMessage);
+        logger.info('Outgoing message emitted via WebSocket:', formattedMessage.body);
+    } else {
+        logger.warn('Socket.IO instance not available for WebSocket emission.');
+    }
+
+  } catch (error) {
+    logger.error('Error processing outgoing message:', error);
+  }
+}
+
 module.exports = {
   handleIncomingMessage,
+  handleOutgoingMessage
 };
