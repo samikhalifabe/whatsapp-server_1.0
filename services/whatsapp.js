@@ -122,17 +122,26 @@ async function initializeWhatsAppClient(io) {
       return;
     }
 
+    // IGNORER les messages entrants (déjà gérés par l'événement 'message')
+    if (!msg.fromMe) {
+      return;
+    }
+
     // Si c'est un message sortant (que vous avez envoyé depuis WhatsApp Web/téléphone)
     if (msg.fromMe && msg.to !== 'status@broadcast') {
       // VÉRIFIER SI LE MESSAGE A ÉTÉ ENVOYÉ VIA L'API
       // Si le message a été envoyé dans les 30 dernières secondes via sendWhatsAppMessage,
       // alors ne pas le traiter ici pour éviter la duplication
       const recentApiMessages = getRecentApiMessages();
-      const isFromApi = recentApiMessages.some(apiMsg => 
-        Math.abs(apiMsg.timestamp - (msg.timestamp * 1000)) < 30000 && // 30 secondes
-        apiMsg.to === msg.to &&
-        apiMsg.body === msg.body
-      );
+      const isFromApi = recentApiMessages.some(apiMsg => {
+        const timeDiff = Math.abs(apiMsg.timestamp - (msg.timestamp * 1000));
+        const sameRecipient = apiMsg.to === msg.to;
+        const sameContent = apiMsg.body === msg.body;
+        
+        logger.debug(`Checking API message: timeDiff=${timeDiff}ms, sameRecipient=${sameRecipient}, sameContent=${sameContent}`);
+        
+        return timeDiff < 30000 && sameRecipient && sameContent; // 30 secondes
+      });
       
       if (!isFromApi) {
         logger.info('Outgoing message detected from WhatsApp Web/Phone:', msg.body);

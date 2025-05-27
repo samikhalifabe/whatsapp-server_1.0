@@ -231,8 +231,11 @@ async function generateAIResponseWithHistory(from, message) {
       history.splice(0, 2); // Remove the oldest messages
     }
 
-    // If delays are enabled, calculate a realistic typing delay
-    if (currentAiConfig.typingDelays && currentAiConfig.typingDelays.enabled) {
+    // Vérifier si c'est un message de démo (simulateur) - pas de délai pour les tests
+    const isDemoMode = from && from.includes('demo+');
+    
+    // If delays are enabled AND not in demo mode, calculate a realistic typing delay
+    if (currentAiConfig.typingDelays && currentAiConfig.typingDelays.enabled && !isDemoMode) {
       // Calculate a delay based on the response length
       const wordCount = aiResponse.split(/\s+/).length;
       let typingTimeMs = Math.min(
@@ -254,6 +257,8 @@ async function generateAIResponseWithHistory(from, message) {
         typingDelay: typingTimeMs,
         showTypingIndicator: currentAiConfig.typingDelays.showTypingIndicator
       };
+    } else if (isDemoMode) {
+      logger.info(`🎭 Mode démo détecté - réponse instantanée`);
     }
 
     // If delays are disabled, return just the response

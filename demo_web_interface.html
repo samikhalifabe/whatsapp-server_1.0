@@ -322,8 +322,10 @@
         socket.on('new_message', (message) => {
             console.log('📩 Nouveau message reçu:', message);
             
-            // Masquer l'indicateur de frappe
-            hideTypingIndicator();
+            // Masquer l'indicateur de frappe quand on reçoit une réponse IA
+            if (message.from === 'me') {
+                hideTypingIndicator();
+            }
             
             if (message.from === 'demo+33123456789@c.us') {
                 // Message de l'utilisateur (démo)
@@ -373,8 +375,8 @@
         async function sendMessage(text) {
             if (!text.trim() || !isConnected) return;
             
-            // Afficher le message utilisateur immédiatement
-            addMessage(text, 'user');
+            // Ne PAS afficher immédiatement - laisser WebSocket gérer
+            // addMessage(text, 'user'); // ← SUPPRIMÉ pour éviter duplication
             
             // Afficher l'indicateur de frappe
             showTypingIndicator();
