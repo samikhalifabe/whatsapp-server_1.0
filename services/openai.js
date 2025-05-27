@@ -1,19 +1,19 @@
-const { openai, openaiApiKey } = require('../config/ai');
+const { openai, grokApiKey } = require('../config/ai');
 const logger = require('../utils/logger');
 
-// Function to check OpenAI connection
-async function checkOpenAIConnection() {
+// Function to check Grok connection
+async function checkGrokConnection() {
   // Check if AI is enabled (requires API key)
-  if (!openaiApiKey) {
+  if (!grokApiKey) {
       return {
           success: false,
-          message: "OpenAI API key is not configured. AI features are disabled."
+          message: "Grok API key is not configured. AI features are disabled."
       };
   }
   try {
     // Try a simple request to check if the API is accessible
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o", // Using gpt-4o for the connection test as it's a capable model
+      model: "grok-3-mini", // Using grok-3-mini for the connection test
       messages: [
         {
           role: "system",
@@ -28,22 +28,26 @@ async function checkOpenAIConnection() {
     });
 
     // If we reach here, the connection works
-    logger.info('✅ OpenAI connection established successfully:', completion.model);
+    logger.info('✅ Grok connection established successfully:', completion.model);
     return {
       success: true,
       model: completion.model,
-      message: "Connexion OpenAI établie avec succès"
+      message: "Connexion Grok établie avec succès"
     };
   } catch (error) {
-    logger.error('❌ OpenAI connection error:', error);
+    logger.error('❌ Grok connection error:', error);
     return {
       success: false,
       error: error.message,
-      message: "Erreur de connexion à OpenAI"
+      message: "Erreur de connexion à Grok"
     };
   }
 }
 
+// Keep the old function name for backward compatibility
+const checkOpenAIConnection = checkGrokConnection;
+
 module.exports = {
   checkOpenAIConnection,
+  checkGrokConnection,
 };

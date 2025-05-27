@@ -1,10 +1,12 @@
-const { openai, openaiApiKey, sanitizeTypingDelays, defaultAiConfig } = require('../config/ai');
+const { openai, grokApiKey, sanitizeTypingDelays, defaultAiConfig, getModelApiParams } = require('../config/ai');
 const logger = require('../utils/logger');
 const { supabase } = require('./database'); // Import supabase at the top
+const Message = require('../models/Message'); // Import Message model for history
+const { normalizePhoneNumber } = require('../utils/phoneNumber'); // Import phone number utils
 
 // Map to store conversation history (limited size)
 const conversationHistory = new Map();
-const MAX_HISTORY_LENGTH = 5; // Number of messages to keep in history
+const MAX_HISTORY_LENGTH = 15; // Number of messages to keep in history (increased for better context)
 
 // Variable to hold the current AI configuration (loaded from DB)
 let currentAiConfig = { ...defaultAiConfig }; // Start with defaults
@@ -61,7 +63,7 @@ async function loadAIConfigFromDB() {
     }
 
     currentAiConfig = {
-      enabled: typeof configToUse.enabled === 'boolean' ? configToUse.enabled : !!openaiApiKey,
+      enabled: typeof configToUse.enabled === 'boolean' ? configToUse.enabled : !!grokApiKey,
       respondToAll: typeof configToUse.respond_to_all === 'boolean' ? configToUse.respond_to_all : false,
       systemPrompt: configToUse.system_prompt || defaultAiConfig.systemPrompt,
       keywords: Array.isArray(configToUse.keywords) ? configToUse.keywords : defaultAiConfig.keywords,
@@ -76,7 +78,7 @@ async function loadAIConfigFromDB() {
     // Fallback to initial defaultAiConfig if all else fails
     currentAiConfig = { ...defaultAiConfig };
     currentAiConfig.typingDelays = sanitizeTypingDelays(currentAiConfig.typingDelays, false); // Ensure defaults are sanitized
-    currentAiConfig.enabled = !!openaiApiKey; // Ensure AI is disabled if no key
+    currentAiConfig.enabled = !!grokApiKey; // Ensure AI is disabled if no key
   }
 }
 
@@ -132,6 +134,88 @@ async function saveAIConfigToDB(config) {
   }
 }
 
+// Function to find conversation by phone number (avoiding circular dependency)
+async function findConversationByPhone(phoneNumber) {
+  try {
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    
+    const { data: conversations, error } = await supabase
+      .from('conversations')
+      .select('id, phone_number, vehicle_id, detected_price, state')
+      .eq('phone_number', normalizedPhone)
+      .limit(1);
+    
+    if (error) {
+      logger.error('Error finding conversation by phone:', error);
+      return null;
+    }
+    
+    return conversations && conversations.length > 0 ? conversations[0] : null;
+  } catch (error) {
+    logger.error('Exception finding conversation by phone:', error);
+    return null;
+  }
+}
+
+// Function to load conversation history from Supabase database
+async function loadConversationHistoryFromDB(phoneNumber) {
+  try {
+    logger.info(`📚 Loading conversation history from DB for contact: ${phoneNumber}`);
+    
+    // First, find the conversation ID from the phone number
+    const conversation = await findConversationByPhone(phoneNumber);
+    
+    if (!conversation || !conversation.id) {
+      logger.info(`📭 No conversation found for phone number: ${phoneNumber}`);
+      return [];
+    }
+    
+    logger.info(`🔍 Found conversation ID: ${conversation.id} for phone: ${phoneNumber}`);
+    
+    // Log conversation details for context
+    if (conversation.detected_price) {
+      logger.info(`💰 Conversation has detected price: ${conversation.detected_price}€`);
+    }
+    if (conversation.state) {
+      logger.info(`📊 Conversation state: ${conversation.state}`);
+    }
+    
+    // Get messages for this conversation, ordered by timestamp (newest first)
+    const messages = await Message.getMessagesByConversationId(conversation.id);
+    
+    if (!messages || messages.length === 0) {
+      logger.info(`📭 No message history found for conversation: ${conversation.id}`);
+      return [];
+    }
+    
+    // Convert messages to OpenAI format, excluding system messages
+    const history = [];
+    
+    // Take only the most recent messages and reverse to get chronological order (oldest first)
+    const recentMessages = messages.slice(-MAX_HISTORY_LENGTH).reverse();
+    
+    recentMessages.forEach(msg => {
+      // Skip system messages and empty content
+      if (!msg.body || msg.body.trim() === '') return;
+      
+      // Determine role based on is_from_me field
+      const role = msg.is_from_me ? 'assistant' : 'user';
+      
+      history.push({
+        role: role,
+        content: msg.body.trim()
+      });
+    });
+    
+    logger.info(`📖 Loaded ${history.length} messages from DB for context (conversation: ${conversation.id})`);
+    return history;
+    
+  } catch (error) {
+    logger.error(`❌ Error loading conversation history from DB for ${phoneNumber}:`, error);
+    return []; // Return empty array on error
+  }
+}
+
 // Function to generate a response with ChatGPT (basic, might not be used directly)
 async function generateAIResponse(message) {
   // Check if AI is enabled before attempting to generate a response
@@ -141,7 +225,7 @@ async function generateAIResponse(message) {
   }
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // Or gpt-4o
+      model: "grok-3-mini", // Grok 3 Mini model
       messages: [
         {
           role: "system",
@@ -152,7 +236,7 @@ async function generateAIResponse(message) {
           content: message
         }
       ],
-      max_tokens: 150,
+      max_tokens: 1000,
       temperature: 0.7,
     });
 
@@ -179,57 +263,137 @@ async function generateAIResponseWithHistory(from, message) {
   try {
     logger.ai.generating(message);
 
-    // Retrieve or initialize history for this contact
+    // Load conversation history from Supabase database
+    let dbHistory = await loadConversationHistoryFromDB(from);
+    
+    // Retrieve or initialize in-memory history for this contact (as fallback)
     if (!conversationHistory.has(from)) {
       conversationHistory.set(from, []);
     }
 
-    const history = conversationHistory.get(from);
+    const memoryHistory = conversationHistory.get(from);
 
-    // Add the user's message to history
-    history.push({
+    // Combine database history with current message
+    // Priority: Use DB history if available, otherwise fallback to memory
+    let contextHistory = [];
+    
+    if (dbHistory.length > 0) {
+      // Use database history as primary source
+      contextHistory = [...dbHistory];
+      logger.info(`🗄️ Using ${dbHistory.length} messages from database for context`);
+    } else if (memoryHistory.length > 0) {
+      // Fallback to memory history
+      contextHistory = [...memoryHistory];
+      logger.info(`🧠 Using ${memoryHistory.length} messages from memory as fallback`);
+    }
+
+    // Add the current user message to context
+    const currentUserMessage = {
       role: "user",
       content: message
+    };
+    
+    contextHistory.push(currentUserMessage);
+    
+    // Also add to memory history for fallback
+    memoryHistory.push(currentUserMessage);
+
+    // Analyze emoji usage in recent AI messages
+    const recentAIMessages = contextHistory
+      .filter(msg => msg.role === 'assistant')
+      .slice(-3); // Last 3 AI messages
+    
+    // Debug: Log all AI messages for analysis
+    logger.info(`🔍 DEBUG: Total messages in context: ${contextHistory.length}`);
+    logger.info(`🔍 DEBUG: AI messages found: ${recentAIMessages.length}`);
+    recentAIMessages.forEach((msg, index) => {
+      const hasEmoji = msg.content.includes('🙂') || msg.content.includes('🙏');
+      logger.info(`🔍 DEBUG AI msg ${index + 1}: "${msg.content.substring(0, 50)}..." - Émoji: ${hasEmoji ? '✅' : '❌'}`);
     });
+    
+    const emojiCount = recentAIMessages.filter(msg => 
+      msg.content.includes('🙂') || msg.content.includes('🙏')
+    ).length;
+    
+    const shouldAvoidEmoji = emojiCount >= 1; // If any emoji in last 3 AI messages
+    
+    // Log emoji analysis
+    logger.info(`😀 Analyse émojis: ${emojiCount}/${recentAIMessages.length} messages récents avec émojis`);
+    if (shouldAvoidEmoji) {
+      logger.info(`🚫 Éviter émoji dans cette réponse (règle 1/3)`);
+    } else {
+      logger.info(`✅ Émoji autorisé dans cette réponse`);
+    }
+    
+    // Create enhanced system prompt with emoji context
+    let enhancedSystemPrompt = currentAiConfig.systemPrompt;
+    
+    if (shouldAvoidEmoji) {
+      enhancedSystemPrompt += `\n\n⚠️ IMPORTANT: Tu as utilisé ${emojiCount} émoji(s) dans tes 3 derniers messages. N'utilise AUCUN émoji dans cette réponse pour respecter la règle "1 message sur 3".`;
+    } else {
+      enhancedSystemPrompt += `\n\n✅ INFO: Tu peux utiliser 1 émoji (🙂 ou 🙏) dans cette réponse si approprié, mais pas obligatoire.`;
+    }
 
     // Prepare messages for the API, including history
     const messages = [
       {
         role: "system",
-        content: currentAiConfig.systemPrompt
+        content: enhancedSystemPrompt
       },
-      ...history.slice(-MAX_HISTORY_LENGTH) // Only the last N messages
+      ...contextHistory.slice(-MAX_HISTORY_LENGTH) // Only the last N messages
     ];
 
     logger.info(`📤 Sending request to OpenAI with ${messages.length} messages`);
 
     // Call the API with a 30-second timeout
+    const modelName = "grok-3-mini";
+    const apiParams = getModelApiParams(modelName, {
+      model: modelName,
+      messages: messages,
+      max_tokens: 1000,
+      temperature: 0.7,
+    });
+    
     const completion = await Promise.race([
-      openai.chat.completions.create({
-        model: "gpt-4o", // Using gpt-4o as per original code
-        messages: messages,
-        max_tokens: 150,
-        temperature: 0.7,
-      }),
+      openai.chat.completions.create(apiParams),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('30-second timeout exceeded')), 30000)
       )
     ]);
 
     const aiResponse = completion.choices[0].message.content;
+    
+    // Log reasoning content if available (Grok 3 Mini feature)
+    const reasoningContent = completion.choices[0].message.reasoning_content;
+    if (reasoningContent) {
+      logger.info('🧠 Grok Reasoning:', reasoningContent);
+    }
+    
+    // Log token usage including reasoning tokens
+    if (completion.usage) {
+      logger.info(`📊 Token usage - Total: ${completion.usage.total_tokens}, Completion: ${completion.usage.completion_tokens}`);
+      if (completion.usage.completion_tokens_details?.reasoning_tokens) {
+        logger.info(`🤔 Reasoning tokens: ${completion.usage.completion_tokens_details.reasoning_tokens}`);
+      }
+    }
 
     logger.ai.response(aiResponse);
 
-    // Add the response to history
-    history.push({
+    // Add the response to memory history for fallback
+    const assistantMessage = {
       role: "assistant",
       content: aiResponse
-    });
+    };
+    
+    memoryHistory.push(assistantMessage);
 
-    // Limit history size
-    if (history.length > MAX_HISTORY_LENGTH * 2) {
-      history.splice(0, 2); // Remove the oldest messages
+    // Limit memory history size
+    if (memoryHistory.length > MAX_HISTORY_LENGTH * 2) {
+      memoryHistory.splice(0, 2); // Remove the oldest messages
     }
+    
+    // Note: The AI response will be saved to database automatically 
+    // by the message handling system when it's sent via WhatsApp
 
     // Vérifier si c'est un message de démo (simulateur) - pas de délai pour les tests
     const isDemoMode = from && from.includes('demo+');
@@ -324,5 +488,6 @@ module.exports = {
   getAiConfig,
   updateAiConfig,
   conversationHistory, // Export history map for potential external use (e.g., clearing)
+  loadConversationHistoryFromDB, // Export for external access to DB history
   MAX_HISTORY_LENGTH,
 };

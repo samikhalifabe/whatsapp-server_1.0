@@ -28,12 +28,16 @@ Créez un fichier `.env` à la racine du répertoire `whatsapp-server` avec les 
 ```dotenv
 SUPABASE_URL=votre_url_supabase
 SUPABASE_KEY=votre_clé_anon_supabase
-OPENAI_API_KEY=votre_clé_api_openai # Optionnel, pour les fonctionnalités IA
+GROK_API_KEY=votre_clé_api_grok # Clé API Grok pour les fonctionnalités IA
+GROK_MODEL=grok-3-mini # Optionnel, modèle Grok à utiliser (par défaut: grok-3-mini)
+GROK_TEMPERATURE=0.7 # Optionnel, créativité des réponses (0.0 à 1.0)
+GROK_MAX_TOKENS=300 # Optionnel, longueur maximale des réponses
+GROK_REASONING_EFFORT=low # Optionnel, effort de raisonnement pour Grok 3 Mini (low/high)
 # CHROME_PATH=/chemin/vers/chrome # Optionnel, si Chrome n'est pas détecté automatiquement
 # WHATSAPP_USER_DATA_DIR=/chemin/pour/données/utilisateur # Optionnel, pour spécifier le répertoire de données utilisateur de Chrome (Windows)
 ```
 
-Remplacez les valeurs par vos propres informations d'identification Supabase et OpenAI. Le chemin de Chrome et le répertoire de données utilisateur sont optionnels si la détection automatique fonctionne.
+Remplacez les valeurs par vos propres informations d'identification Supabase et Grok. Le chemin de Chrome et le répertoire de données utilisateur sont optionnels si la détection automatique fonctionne.
 
 ### Démarrage du serveur
 
@@ -63,6 +67,6 @@ npm run dev
 *   **Chrome non trouvé** : Si le serveur ne parvient pas à trouver l'exécutable Chrome, vérifiez qu'il est installé dans un emplacement standard. Si vous l'avez installé dans un emplacement personnalisé, définissez la variable d'environnement `CHROME_PATH` dans votre fichier `.env` avec le chemin correct.
 *   **Problèmes d'autorisation sur Windows** : Si vous rencontrez des problèmes liés aux autorisations de fichiers ou de répertoire sur Windows, essayez d'exécuter votre terminal en tant qu'administrateur avant de démarrer le serveur. Vous pouvez également spécifier un répertoire de données utilisateur de Chrome différent en définissant la variable d'environnement `WHATSAPP_USER_DATA_DIR` dans votre fichier `.env`.
 *   **Problèmes de connexion Supabase** : Vérifiez que `SUPABASE_URL` et `SUPABASE_KEY` sont correctement définis dans votre fichier `.env`.
-*   **Problèmes de connexion OpenAI** : Vérifiez que `OPENAI_API_KEY` est correctement défini dans votre fichier `.env` si vous utilisez les fonctionnalités IA.
+*   **Problèmes de connexion Grok** : Vérifiez que `GROK_API_KEY` est correctement défini dans votre fichier `.env` si vous utilisez les fonctionnalités IA.
 
 En suivant ces étapes, vous devriez pouvoir configurer et exécuter le serveur WhatsApp Automation sur macOS et Windows.

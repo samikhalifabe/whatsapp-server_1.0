@@ -2,15 +2,16 @@ const OpenAI = require('openai');
 const logger = require('../utils/logger');
 const { AUTOMOTIVE_PROMPT_TEMPLATES, selectOptimalTemplate } = require('./promptTemplates');
 
-// Configuration de l'API OpenAI
-const openaiApiKey = process.env.OPENAI_API_KEY;
+// Configuration de l'API Grok (compatible OpenAI)
+const grokApiKey = process.env.GROK_API_KEY;
 
-if (!openaiApiKey) {
-    logger.warn('WARNING: OPENAI_API_KEY environment variable is not set. AI features will be disabled.');
+if (!grokApiKey) {
+    logger.warn('WARNING: GROK_API_KEY environment variable is not set. AI features will be disabled.');
 }
 
 const openai = new OpenAI({
-  apiKey: openaiApiKey,
+  apiKey: grokApiKey,
+  baseURL: 'https://api.x.ai/v1',
 });
 
 // ===========================================
@@ -25,36 +26,52 @@ const PROMPT_TEMPLATES = AUTOMOTIVE_PROMPT_TEMPLATES;
 // ===========================================
 
 const AI_PARAMETERS = {
-  // Modèles OpenAI disponibles
+  // Modèles Grok disponibles
   models: {
-    'gpt-4': {
-      name: 'GPT-4',
-      maxTokens: 4096,
-      costPer1kTokens: 0.03,
-      recommended: true
-    },
-    'gpt-4-turbo': {
-      name: 'GPT-4 Turbo',
-      maxTokens: 4096,
-      costPer1kTokens: 0.01,
-      recommended: true
-    },
-    'gpt-3.5-turbo': {
-      name: 'GPT-3.5 Turbo',
-      maxTokens: 4096,
+    'grok-3-mini': {
+      name: 'Grok 3 Mini',
+      maxTokens: 131072,
       costPer1kTokens: 0.002,
-      recommended: false
+      recommended: true,
+      supportsReasoning: true,
+      description: 'Lightweight thinking model, ideal for math and reasoning tasks'
+    },
+    'grok-3-mini-fast': {
+      name: 'Grok 3 Mini Fast',
+      maxTokens: 131072,
+      costPer1kTokens: 0.002,
+      recommended: false,
+      supportsReasoning: true,
+      description: 'Faster version of Grok 3 Mini with reasoning capabilities'
+    },
+    'grok-beta': {
+      name: 'Grok Beta',
+      maxTokens: 131072,
+      costPer1kTokens: 0.015,
+      recommended: false,
+      supportsReasoning: false
+    },
+    'grok-vision-beta': {
+      name: 'Grok Vision Beta',
+      maxTokens: 131072,
+      costPer1kTokens: 0.015,
+      recommended: false,
+      capabilities: ['text', 'vision'],
+      supportsReasoning: false
     }
   },
 
   // Paramètres de configuration flexibles
   defaults: {
-    model: process.env.OPENAI_MODEL || 'gpt-4',
-    temperature: parseFloat(process.env.OPENAI_TEMPERATURE) || 0.7,
-    maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS) || 300,
-    topP: parseFloat(process.env.OPENAI_TOP_P) || 0.9,
-    frequencyPenalty: parseFloat(process.env.OPENAI_FREQUENCY_PENALTY) || 0.0,
-    presencePenalty: parseFloat(process.env.OPENAI_PRESENCE_PENALTY) || 0.0,
+    model: process.env.GROK_MODEL || 'grok-3-mini',
+    temperature: parseFloat(process.env.GROK_TEMPERATURE) || 0.7,
+    maxTokens: parseInt(process.env.GROK_MAX_TOKENS) || 300,
+    topP: parseFloat(process.env.GROK_TOP_P) || 0.9,
+    frequencyPenalty: parseFloat(process.env.GROK_FREQUENCY_PENALTY) || 0.0,
+    presencePenalty: parseFloat(process.env.GROK_PRESENCE_PENALTY) || 0.0,
+    
+    // Paramètres spécifiques à Grok 3 Mini (reasoning)
+    reasoningEffort: process.env.GROK_REASONING_EFFORT || 'low', // 'low' ou 'high'
     
     // Paramètres de retry et timeout
     maxRetries: parseInt(process.env.AI_MAX_RETRIES) || 3,
@@ -179,9 +196,31 @@ function selectPromptTemplate(message, conversationHistory = []) {
   return selectOptimalTemplate(message, conversationHistory);
 }
 
+/**
+ * Vérifie si un modèle supporte le reasoning
+ */
+function supportsReasoning(modelName) {
+  const model = AI_PARAMETERS.models[modelName];
+  return model && model.supportsReasoning === true;
+}
+
+/**
+ * Génère les paramètres d'API adaptés au modèle
+ */
+function getModelApiParams(modelName, baseParams = {}) {
+  const params = { ...baseParams };
+  
+  // Ajouter le paramètre reasoning_effort si le modèle le supporte
+  if (supportsReasoning(modelName)) {
+    params.reasoning_effort = AI_PARAMETERS.defaults.reasoningEffort;
+  }
+  
+  return params;
+}
+
 // Configuration par défaut pour les réponses automatisées (maintient la compatibilité)
 const defaultAiConfig = {
-  enabled: !!openaiApiKey,
+  enabled: !!grokApiKey,
   respondToAll: false,
   keywords: ['assistance', 'aide', 'info', 'bonjour', 'salut', 'prix', 'véhicule', 'voiture'],
   systemPrompt: PROMPT_TEMPLATES.GENERAL_INQUIRY.systemPrompt,
@@ -211,7 +250,7 @@ const defaultAiConfig = {
 
 module.exports = {
   openai,
-  openaiApiKey,
+  grokApiKey,
   sanitizeTypingDelays,
   defaultAiConfig,
   
@@ -219,5 +258,7 @@ module.exports = {
   PROMPT_TEMPLATES,
   AI_PARAMETERS,
   generateVehicleContext,
-  selectPromptTemplate
+  selectPromptTemplate,
+  supportsReasoning,
+  getModelApiParams
 };

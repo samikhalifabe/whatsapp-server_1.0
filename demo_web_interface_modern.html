@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulateur IA - Démo WhatsApp</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        /* Variables CSS personnalisées pour le thème */
+        :root {
+            --background: 0 0% 100%;
+            --foreground: 222.2 84% 4.9%;
+            --card: 0 0% 100%;
+            --card-foreground: 222.2 84% 4.9%;
+            --popover: 0 0% 100%;
+            --popover-foreground: 222.2 84% 4.9%;
+            --primary: 142 70% 49%;
+            --primary-foreground: 210 40% 98%;
+            --secondary: 210 40% 96.1%;
+            --secondary-foreground: 222.2 47.4% 11.2%;
+            --muted: 210 40% 96.1%;
+            --muted-foreground: 215.4 16.3% 46.9%;
+            --accent: 210 40% 96.1%;
+            --accent-foreground: 222.2 47.4% 11.2%;
+            --destructive: 0 84.2% 60.2%;
+            --destructive-foreground: 210 40% 98%;
+            --border: 214.3 31.8% 91.4%;
+            --input: 214.3 31.8% 91.4%;
+            --ring: 142 70% 49%;
+            --radius: 0.5rem;
+            --whatsapp-green: #25D366;
+            --whatsapp-dark-green: #128C7E;
+            --whatsapp-light-green: #dcf8c6;
+            --whatsapp-bg: #e5ddd5;
+        }
+
+        .dark {
+            --background: 222.2 84% 4.9%;
+            --foreground: 210 40% 98%;
+            --card: 222.2 84% 4.9%;
+            --card-foreground: 210 40% 98%;
+            --popover: 222.2 84% 4.9%;
+            --popover-foreground: 210 40% 98%;
+            --primary: 142 70% 49%;
+            --primary-foreground: 222.2 47.4% 11.2%;
+            --secondary: 217.2 32.6% 17.5%;
+            --secondary-foreground: 210 40% 98%;
+            --muted: 217.2 32.6% 17.5%;
+            --muted-foreground: 215 20.2% 65.1%;
+            --accent: 217.2 32.6% 17.5%;
+            --accent-foreground: 210 40% 98%;
+            --destructive: 0 62.8% 30.6%;
+            --destructive-foreground: 210 40% 98%;
+            --border: 217.2 32.6% 17.5%;
+            --input: 217.2 32.6% 17.5%;
+            --ring: 142 70% 49%;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+        }
+
+        /* Classes utilitaires personnalisées */
+        .bg-whatsapp { background-color: var(--whatsapp-green); }
+        .bg-whatsapp-dark { background-color: var(--whatsapp-dark-green); }
+        .bg-whatsapp-light { background-color: var(--whatsapp-light-green); }
+        .bg-whatsapp-chat { background-color: var(--whatsapp-bg); }
+        .text-whatsapp { color: var(--whatsapp-green); }
+
+        /* Animations personnalisées */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .animate-fadeIn { animation: fadeIn 0.3s ease-out; }
+        .animate-slideIn { animation: slideIn 0.3s ease-out; }
+        .animate-pulse-slow { animation: pulse 2s ease-in-out infinite; }
+
+        /* Styles pour les messages de chat */
+        .message-bubble-incoming {
+            background: hsl(var(--card));
+            border: 1px solid hsl(var(--border));
+            border-top-left-radius: 0.25rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .message-bubble-outgoing {
+            background: var(--whatsapp-light-green);
+            border-top-right-radius: 0.25rem;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        .dark .message-bubble-outgoing {
+            background: #2f7132;
+            color: white;
+        }
+
+        /* Indicateur de frappe personnalisé */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background: #9ca3af;
+            border-radius: 50%;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        /* Scrollbar personnalisée */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: hsl(var(--muted));
+            border-radius: 3px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: hsl(var(--muted-foreground));
+            border-radius: 3px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: hsl(var(--foreground));
+        }
+
+        /* Toggle theme */
+        .theme-toggle {
+            position: relative;
+            width: 50px;
+            height: 24px;
+            background: hsl(var(--muted));
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .theme-toggle.active {
+            background: var(--whatsapp-green);
+        }
+
+        .theme-toggle-knob {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .theme-toggle.active .theme-toggle-knob {
+            transform: translateX(26px);
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        border: "hsl(var(--border))",
+                        input: "hsl(var(--input))",
+                        ring: "hsl(var(--ring))",
+                        background: "hsl(var(--background))",
+                        foreground: "hsl(var(--foreground))",
+                        primary: {
+                            DEFAULT: "hsl(var(--primary))",
+                            foreground: "hsl(var(--primary-foreground))",
+                        },
+                        secondary: {
+                            DEFAULT: "hsl(var(--secondary))",
+                            foreground: "hsl(var(--secondary-foreground))",
+                        },
+                        destructive: {
+                            DEFAULT: "hsl(var(--destructive))",
+                            foreground: "hsl(var(--destructive-foreground))",
+                        },
+                        muted: {
+                            DEFAULT: "hsl(var(--muted))",
+                            foreground: "hsl(var(--muted-foreground))",
+                        },
+                        accent: {
+                            DEFAULT: "hsl(var(--accent))",
+                            foreground: "hsl(var(--accent-foreground))",
+                        },
+                        popover: {
+                            DEFAULT: "hsl(var(--popover))",
+                            foreground: "hsl(var(--popover-foreground))",
+                        },
+                        card: {
+                            DEFAULT: "hsl(var(--card))",
+                            foreground: "hsl(var(--card-foreground))",
+                        },
+                        whatsapp: {
+                            DEFAULT: "#25D366",
+                            dark: "#128C7E",
+                        },
+                    },
+                    borderRadius: {
+                        lg: "var(--radius)",
+                        md: "calc(var(--radius) - 2px)",
+                        sm: "calc(var(--radius) - 4px)",
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gradient-to-br from-background to-muted min-h-screen transition-colors duration-300">
+    <!-- Container principal -->
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-6xl mx-auto">
+            <!-- Header -->
+            <div class="bg-whatsapp text-white rounded-t-lg px-6 py-4 shadow-lg">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                            <i data-lucide="bot" class="w-6 h-6"></i>
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-semibold">Simulateur IA WhatsApp</h1>
+                            <p class="text-white/80 text-sm">Interface de test back office - Mode développeur</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <!-- Toggle dark mode -->
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="sun" class="w-4 h-4"></i>
+                            <div class="theme-toggle active" onclick="toggleTheme()" id="themeToggle">
+                                <div class="theme-toggle-knob">
+                                    <i data-lucide="moon" class="w-3 h-3 text-gray-600"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Status connexion -->
+                        <div class="flex items-center space-x-2">
+                            <div id="connectionDot" class="w-3 h-3 bg-red-400 rounded-full transition-colors"></div>
+                            <span id="connectionStatus" class="text-sm">Connexion...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interface principale -->
+            <div class="bg-card rounded-b-lg shadow-xl overflow-hidden border border-border">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-0">
+                    <!-- Panneau de contrôle -->
+                    <div class="lg:col-span-1 bg-muted/30 border-r border-border flex flex-col">
+                        <!-- Contrôles d'état -->
+                        <div class="p-4 border-b border-border">
+                            <!-- Header avec titre et bouton refresh -->
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-6 h-6 bg-whatsapp/10 rounded flex items-center justify-center">
+                                        <i data-lucide="settings" class="w-3.5 h-3.5 text-whatsapp"></i>
+                                    </div>
+                                    <h3 class="font-semibold text-foreground text-sm">État conversation</h3>
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    <button id="refreshStateBtn" class="p-1.5 hover:bg-accent rounded-md transition-colors" onclick="loadConversationState()" title="Actualiser l'état">
+                                        <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-muted-foreground"></i>
+                                    </button>
+                                    <button id="resetDemoBtn" class="p-1.5 hover:bg-red-500/10 text-red-400 hover:text-red-500 rounded-md transition-colors" onclick="resetDemo()" title="Reset complet de la démo">
+                                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- Badge d'état actuel -->
+                            <div class="mb-4">
+                                <label class="text-xs text-muted-foreground uppercase tracking-wide font-medium">État actuel</label>
+                                <div id="currentStateBadge" class="mt-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground inline-flex items-center gap-1.5">
+                                    <div class="w-2 h-2 rounded-full bg-muted-foreground"></div>
+                                    Non créée
+                                </div>
+                            </div>
+
+                            <!-- Boutons d'état -->
+                            <div class="space-y-2 mb-4">
+                                <button class="state-btn" data-state="active" onclick="changeConversationState('active')">
+                                    <div class="flex items-center gap-2.5 w-full">
+                                        <i data-lucide="check-circle" class="w-4 h-4 flex-shrink-0"></i>
+                                        <span class="flex-1 text-left">Actif</span>
+                                    </div>
+                                </button>
+                                <button class="state-btn" data-state="negotiation" onclick="changeConversationState('negotiation')">
+                                    <div class="flex items-center gap-2.5 w-full">
+                                        <i data-lucide="handshake" class="w-4 h-4 flex-shrink-0"></i>
+                                        <span class="flex-1 text-left">Négociation</span>
+                                    </div>
+                                </button>
+                                <button class="state-btn" data-state="completed" onclick="changeConversationState('completed')">
+                                    <div class="flex items-center gap-2.5 w-full">
+                                        <i data-lucide="check-circle-2" class="w-4 h-4 flex-shrink-0"></i>
+                                        <span class="flex-1 text-left">Terminé</span>
+                                    </div>
+                                </button>
+                                <button class="state-btn" data-state="archived" onclick="changeConversationState('archived')">
+                                    <div class="flex items-center gap-2.5 w-full">
+                                        <i data-lucide="archive" class="w-4 h-4 flex-shrink-0"></i>
+                                        <span class="flex-1 text-left">Archivé</span>
+                                    </div>
+                                </button>
+                            </div>
+
+                            <!-- Info état -->
+                            <div id="stateInfo" class="text-xs text-muted-foreground bg-green-500/5 p-3 rounded-lg border border-green-500/10">
+                                <div class="flex gap-2">
+                                    <i data-lucide="shield-check" class="w-3.5 h-3.5 text-green-400 mt-0.5 flex-shrink-0"></i>
+                                    <div class="leading-relaxed">
+                                        <div class="font-medium text-green-400 mb-1">🎮 Mode Démo</div>
+                                        <div>• L'IA répond seulement quand l'état est "Actif"</div>
+                                        <div>• Changements d'état automatiques désactivés</div>
+                                        <div>• Contrôle manuel complet des états</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Scénarios prédéfinis -->
+                        <div class="p-4 flex-1">
+                            <div class="flex items-center gap-2 mb-4">
+                                <div class="w-6 h-6 bg-green-500/10 rounded flex items-center justify-center">
+                                    <i data-lucide="play-circle" class="w-3.5 h-3.5 text-green-500"></i>
+                                </div>
+                                <h3 class="font-semibold text-foreground text-sm">Scénarios rapides</h3>
+                            </div>
+                            <div class="space-y-2">
+                                <button class="scenario-btn" onclick="sendMessage('Bonjour')">
+                                    <div class="flex items-center gap-2.5 w-full">
+                                        <i data-lucide="hand-wave" class="w-4 h-4 flex-shrink-0"></i>
+                                        <span class="flex-1 text-left">Saluer</span>
+                                    </div>
+                                </button>
+                                <button class="scenario-btn" onclick="sendMessage('Je suis intéressé par votre véhicule')">
+                                    <div class="flex items-center gap-2.5 w-full">
+                                        <i data-lucide="car" class="w-4 h-4 flex-shrink-0"></i>
+                                        <span class="flex-1 text-left">Montrer intérêt</span>
+                                    </div>
+                                </button>
+                                <button class="scenario-btn" onclick="sendMessage('Quel est le prix ?')">
+                                    <div class="flex items-center gap-2.5 w-full">
+                                        <i data-lucide="euro" class="w-4 h-4 flex-shrink-0"></i>
+                                        <span class="flex-1 text-left">Demander prix</span>
+                                    </div>
+                                </button>
+                                <button class="scenario-btn" onclick="sendMessage('15000 euros ça vous va ?')">
+                                    <div class="flex items-center gap-2.5 w-full">
+                                        <i data-lucide="handshake" class="w-4 h-4 flex-shrink-0"></i>
+                                        <span class="flex-1 text-left">Négocier</span>
+                                    </div>
+                                </button>
+                                <button class="scenario-btn" onclick="clearChat()">
+                                    <div class="flex items-center gap-2.5 w-full">
+                                        <i data-lucide="eye-off" class="w-4 h-4 flex-shrink-0"></i>
+                                        <span class="flex-1 text-left">Vider affichage</span>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Zone de chat -->
+                    <div class="lg:col-span-2 flex flex-col h-[600px]">
+                        <!-- Zone de messages -->
+                        <div id="chatArea" class="flex-1 overflow-y-auto p-4 custom-scrollbar bg-gradient-to-b from-card to-muted/20">
+                            <!-- Message de bienvenue -->
+                            <div class="flex justify-start mb-4 animate-fadeIn">
+                                <div class="flex items-start space-x-3 max-w-xs">
+                                    <div class="w-8 h-8 bg-whatsapp rounded-full flex items-center justify-center flex-shrink-0">
+                                        <i data-lucide="bot" class="w-4 h-4 text-white"></i>
+                                    </div>
+                                    <div class="message-bubble-incoming rounded-lg p-3">
+                                        <p class="text-sm text-card-foreground">👋 Bonjour ! Je suis l'assistant IA de démonstration. Envoyez-moi un message ou utilisez les scénarios pour commencer !</p>
+                                        <div class="text-xs text-muted-foreground mt-1">Maintenant</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Indicateur de frappe -->
+                        <div id="typingIndicator" class="px-4 py-2 hidden">
+                            <div class="flex items-start space-x-3 max-w-xs">
+                                <div class="w-8 h-8 bg-whatsapp rounded-full flex items-center justify-center flex-shrink-0">
+                                    <i data-lucide="bot" class="w-4 h-4 text-white"></i>
+                                </div>
+                                <div class="bg-card rounded-lg px-4 py-3 shadow-sm border border-border">
+                                    <div class="flex items-center space-x-1">
+                                        <span class="text-sm text-muted-foreground">L'IA écrit</span>
+                                        <div class="typing-indicator ml-2">
+                                            <div class="typing-dot"></div>
+                                            <div class="typing-dot"></div>
+                                            <div class="typing-dot"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Zone de saisie -->
+                        <div class="p-4 bg-card border-t border-border">
+                            <div class="flex items-end space-x-3">
+                                <div class="flex-1 relative">
+                                    <input 
+                                        type="text" 
+                                        id="messageInput" 
+                                        placeholder="Tapez votre message..."
+                                        class="w-full px-4 py-3 pr-12 border border-input bg-background text-foreground rounded-full focus:ring-2 focus:ring-whatsapp focus:border-transparent outline-none transition-all"
+                                        onkeypress="handleKeyPress(event)"
+                                    >
+                                    <button class="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-muted-foreground hover:text-foreground transition-colors">
+                                        <i data-lucide="smile" class="w-5 h-5"></i>
+                                    </button>
+                                </div>
+                                <button 
+                                    id="sendBtn" 
+                                    class="bg-whatsapp hover:bg-whatsapp-dark text-white p-3 rounded-full transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
+                                    onclick="sendCurrentMessage()"
+                                >
+                                    <i data-lucide="send" class="w-5 h-5"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Styles pour les boutons -->
+    <style>
+        .state-btn {
+            @apply w-full px-3 py-2.5 rounded-lg border border-border text-sm font-medium transition-all duration-200 cursor-pointer bg-card hover:bg-accent text-card-foreground hover:border-border/50;
+        }
+
+        .state-btn.active {
+            @apply border-green-500/30 bg-green-500/10 text-green-400 hover:bg-green-500/20 hover:border-green-500/50;
+        }
+
+        .state-btn.active.current {
+            @apply bg-green-500 text-white border-green-500 hover:bg-green-600 shadow-sm;
+        }
+
+        .state-btn.negotiation {
+            @apply border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:border-amber-500/50;
+        }
+
+        .state-btn.negotiation.current {
+            @apply bg-amber-500 text-white border-amber-500 hover:bg-amber-600 shadow-sm;
+        }
+
+        .state-btn.completed {
+            @apply border-blue-500/30 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 hover:border-blue-500/50;
+        }
+
+        .state-btn.completed.current {
+            @apply bg-blue-500 text-white border-blue-500 hover:bg-blue-600 shadow-sm;
+        }
+
+        .state-btn.archived {
+            @apply border-border bg-muted text-muted-foreground hover:bg-accent;
+        }
+
+        .state-btn.archived.current {
+            @apply bg-slate-500 text-white border-slate-500 hover:bg-slate-600 shadow-sm;
+        }
+
+        .state-btn:disabled {
+            @apply opacity-50 cursor-not-allowed;
+        }
+
+        .scenario-btn {
+            @apply w-full px-3 py-2.5 rounded-lg bg-card hover:bg-accent border border-border text-sm text-card-foreground transition-all duration-200;
+        }
+
+        .scenario-btn:hover {
+            @apply border-whatsapp/30 text-whatsapp shadow-sm;
+        }
+
+        .scenario-btn.danger {
+            @apply border-red-500/20 text-red-400 hover:bg-red-500/10 hover:border-red-500/40;
+        }
+
+        .dark .scenario-btn:hover {
+            @apply border-whatsapp/50 text-whatsapp;
+        }
+    </style>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        // Initialiser Lucide icons
+        lucide.createIcons();
+
+        // Variables globales
+        const socket = io('http://localhost:3001');
+        let isConnected = false;
+        let isTyping = false;
+        let currentConversationState = null;
+
+        // Éléments DOM
+        const chatArea = document.getElementById('chatArea');
+        const messageInput = document.getElementById('messageInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const connectionDot = document.getElementById('connectionDot');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const typingIndicator = document.getElementById('typingIndicator');
+
+        // === GESTION DU THÈME ===
+        function toggleTheme() {
+            const html = document.documentElement;
+            const toggle = document.getElementById('themeToggle');
+            
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                html.classList.add('light');
+                toggle.classList.remove('active');
+            } else {
+                html.classList.remove('light');
+                html.classList.add('dark');
+                toggle.classList.add('active');
+            }
+            
+            // Re-initialiser les icônes après changement de thème
+            setTimeout(() => lucide.createIcons(), 100);
+        }
+
+        // === GESTION WEBSOCKET ===
+        socket.on('connect', () => {
+            isConnected = true;
+            connectionDot.className = 'w-3 h-3 bg-green-400 rounded-full transition-colors';
+            connectionStatus.textContent = 'Connecté';
+            sendBtn.disabled = false;
+            console.log('✅ Connecté au serveur WebSocket');
+        });
+
+        socket.on('disconnect', () => {
+            isConnected = false;
+            connectionDot.className = 'w-3 h-3 bg-red-400 rounded-full transition-colors';
+            connectionStatus.textContent = 'Déconnecté';
+            sendBtn.disabled = true;
+            console.log('❌ Déconnecté du serveur WebSocket');
+        });
+
+        socket.on('new_message', (message) => {
+            console.log('📩 Nouveau message reçu:', message);
+            
+            if (message.from === 'me') {
+                hideTypingIndicator();
+                addMessage(message.body, 'ai');
+            } else if (message.from === 'demo+33123456789@c.us') {
+                addMessage(message.body, 'user');
+            }
+        });
+
+        // === GESTION DES MESSAGES ===
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} mb-4 animate-slideIn`;
+            
+            const now = new Date().toLocaleTimeString('fr-FR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            if (sender === 'user') {
+                messageDiv.innerHTML = `
+                    <div class="flex items-end space-x-2 max-w-xs">
+                        <div class="message-bubble-outgoing rounded-lg p-3">
+                            <p class="text-sm">${text}</p>
+                            <div class="text-xs opacity-75 mt-1 text-right">${now}</div>
+                        </div>
+                        <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                            <i data-lucide="user" class="w-4 h-4 text-white"></i>
+                        </div>
+                    </div>
+                `;
+            } else {
+                messageDiv.innerHTML = `
+                    <div class="flex items-start space-x-3 max-w-xs">
+                        <div class="w-8 h-8 bg-whatsapp rounded-full flex items-center justify-center flex-shrink-0">
+                            <i data-lucide="bot" class="w-4 h-4 text-white"></i>
+                        </div>
+                        <div class="message-bubble-incoming rounded-lg p-3">
+                            <p class="text-sm text-card-foreground">${text}</p>
+                            <div class="text-xs text-muted-foreground mt-1">${now}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            chatArea.appendChild(messageDiv);
+            
+            // Re-initialiser les icônes pour les nouveaux éléments
+            lucide.createIcons();
+            
+            // Scroll vers le bas
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            if (!isTyping) {
+                isTyping = true;
+                typingIndicator.classList.remove('hidden');
+                chatArea.scrollTop = chatArea.scrollHeight;
+            }
+        }
+
+        function hideTypingIndicator() {
+            if (isTyping) {
+                isTyping = false;
+                typingIndicator.classList.add('hidden');
+            }
+        }
+
+        async function sendMessage(text) {
+            if (!text.trim() || !isConnected) return;
+
+            showTypingIndicator();
+
+            try {
+                const response = await fetch('http://localhost:3001/api/simulate-message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: text })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Erreur lors de l\'envoi du message');
+                }
+
+                console.log('✅ Message envoyé au simulateur');
+
+            } catch (error) {
+                console.error('❌ Erreur envoi message:', error);
+                hideTypingIndicator();
+                addMessage('❌ Erreur lors de l\'envoi du message', 'ai');
+            }
+        }
+
+        function sendCurrentMessage() {
+            const text = messageInput.value.trim();
+            if (text) {
+                sendMessage(text);
+                messageInput.value = '';
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendCurrentMessage();
+            }
+        }
+
+        function clearChat() {
+            // Vider visuellement le chat (mais pas la DB)
+            const chatArea = document.getElementById('chatArea');
+            chatArea.innerHTML = `
+                <div class="flex justify-start mb-4 animate-fadeIn">
+                    <div class="flex items-start space-x-3 max-w-xs">
+                        <div class="w-8 h-8 bg-whatsapp rounded-full flex items-center justify-center flex-shrink-0">
+                            <i data-lucide="bot" class="w-4 h-4 text-white"></i>
+                        </div>
+                        <div class="message-bubble-incoming rounded-lg p-3">
+                            <p class="text-sm text-card-foreground">🧹 Chat vidé localement ! Je suis l'assistant IA de démonstration. Envoyez-moi un message ou utilisez les scénarios pour commencer !</p>
+                            <div class="text-xs text-muted-foreground mt-1">Maintenant</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            lucide.createIcons();
+        }
+
+        // === GESTION DES ÉTATS ===
+        async function loadConversationState() {
+            try {
+                const refreshBtn = document.getElementById('refreshStateBtn');
+                refreshBtn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 text-muted-foreground animate-spin"></i>';
+                refreshBtn.disabled = true;
+
+                const response = await fetch('http://localhost:3001/api/demo-conversation-state');
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.exists) {
+                        currentConversationState = data.state;
+                        updateStateDisplay(data.state);
+
+                        let detectedPriceText = '';
+                        if (data.detectedPrice) {
+                            detectedPriceText = `<div>• Prix détecté: ${data.detectedPrice}€ (sans changement d'état)</div>`;
+                        }
+                        document.getElementById('stateInfo').innerHTML = `
+                            <div class="flex gap-2">
+                                <i data-lucide="shield-check" class="w-3.5 h-3.5 text-green-400 mt-0.5 flex-shrink-0"></i>
+                                <div class="leading-relaxed">
+                                    <div class="font-medium text-green-400 mb-1">🎮 Mode Démo</div>
+                                    <div>• L'IA répond seulement quand l'état est "Actif"</div>
+                                    <div>• Changements d'état automatiques désactivés</div>
+                                    <div>• Contrôle manuel complet des états</div>
+                                    ${detectedPriceText}
+                                </div>
+                            </div>
+                        `;
+
+                        console.log('✅ État conversation chargé:', data.state);
+                    } else {
+                        console.log('ℹ️ Conversation de démo non encore créée');
+                        updateStateDisplay(null);
+                    }
+                } else {
+                    console.error('❌ Erreur chargement état:', data.error);
+                }
+            } catch (error) {
+                console.error('❌ Exception chargement état:', error);
+            } finally {
+                const refreshBtn = document.getElementById('refreshStateBtn');
+                refreshBtn.innerHTML = '<i data-lucide="refresh-cw" class="w-4 h-4 text-muted-foreground"></i>';
+                refreshBtn.disabled = false;
+                lucide.createIcons();
+            }
+        }
+
+        async function changeConversationState(newState) {
+            if (newState === currentConversationState) {
+                console.log('ℹ️ État déjà actuel:', newState);
+                return;
+            }
+
+            try {
+                const stateButtons = document.querySelectorAll('.state-btn');
+                stateButtons.forEach(btn => btn.disabled = true);
+
+                const response = await fetch('http://localhost:3001/api/demo-conversation-state', {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ newState: newState })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    currentConversationState = newState;
+                    updateStateDisplay(newState);
+                    console.log(`✅ État mis à jour: ${newState}`);
+
+                    // Message de succès temporaire
+                    const stateInfo = document.getElementById('stateInfo');
+                    const originalContent = stateInfo.innerHTML;
+                    stateInfo.innerHTML = `
+                        <div class="flex gap-2">
+                            <i data-lucide="check-circle" class="w-3.5 h-3.5 text-green-400 mt-0.5 flex-shrink-0"></i>
+                            <div class="leading-relaxed">
+                                <div class="font-medium text-green-400">✅ État mis à jour vers "${getStateLabel(newState)}"</div>
+                                <div class="text-green-300 text-xs mt-1">Changement manuel en mode démo</div>
+                            </div>
+                        </div>
+                    `;
+                    lucide.createIcons();
+
+                    setTimeout(() => {
+                        stateInfo.innerHTML = originalContent;
+                        lucide.createIcons();
+                    }, 2000);
+
+                } else {
+                    console.error('❌ Erreur changement état:', data.error);
+                    alert(`Erreur lors du changement d'état: ${data.error}`);
+                }
+
+            } catch (error) {
+                console.error('❌ Exception changement état:', error);
+                alert(`Erreur lors du changement d'état: ${error.message}`);
+            } finally {
+                const stateButtons = document.querySelectorAll('.state-btn');
+                stateButtons.forEach(btn => btn.disabled = false);
+            }
+        }
+
+        function updateStateDisplay(state) {
+            const stateBadge = document.getElementById('currentStateBadge');
+            const stateButtons = document.querySelectorAll('.state-btn');
+
+            // Réinitialiser tous les boutons
+            stateButtons.forEach(btn => {
+                btn.classList.remove('current');
+            });
+
+            if (state) {
+                // Mettre à jour le badge
+                const { classes, dotColor } = getStateBadgeClasses(state);
+                stateBadge.innerHTML = `
+                    <div class="w-2 h-2 rounded-full ${dotColor}"></div>
+                    ${getStateLabel(state)}
+                `;
+                stateBadge.className = `mt-1.5 px-2.5 py-1 rounded-md text-xs font-medium inline-flex items-center gap-1.5 ${classes}`;
+
+                // Marquer le bouton actuel
+                const currentButton = document.querySelector(`[data-state="${state}"]`);
+                if (currentButton) {
+                    currentButton.classList.add('current');
+                }
+            } else {
+                stateBadge.innerHTML = `
+                    <div class="w-2 h-2 rounded-full bg-muted-foreground"></div>
+                    Non créée
+                `;
+                stateBadge.className = 'mt-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground inline-flex items-center gap-1.5';
+            }
+        }
+
+        function getStateLabel(state) {
+            const labels = {
+                'active': 'Actif',
+                'negotiation': 'Négociation',
+                'completed': 'Terminé',
+                'archived': 'Archivé'
+            };
+            return labels[state] || state;
+        }
+
+        function getStateBadgeClasses(state) {
+            const stateConfig = {
+                'active': {
+                    classes: 'bg-green-500/20 text-green-400 border border-green-500/30',
+                    dotColor: 'bg-green-400'
+                },
+                'negotiation': {
+                    classes: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
+                    dotColor: 'bg-amber-400'
+                },
+                'completed': {
+                    classes: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+                    dotColor: 'bg-blue-400'
+                },
+                'archived': {
+                    classes: 'bg-muted text-muted-foreground border border-border',
+                    dotColor: 'bg-muted-foreground'
+                }
+            };
+            return stateConfig[state] || {
+                classes: 'bg-muted text-muted-foreground border border-border',
+                dotColor: 'bg-muted-foreground'
+            };
+        }
+
+        // === GESTION DU RESET DÉMO ===
+        async function resetDemo() {
+            // Confirmation avant reset
+            if (!confirm('⚠️ Êtes-vous sûr de vouloir reset complètement la démo ?\n\nCela va supprimer :\n• Tous les messages\n• L\'historique de conversation\n• Les offres de prix\n• Remettre l\'état à "Actif"\n\nCette action est irréversible.')) {
+                return;
+            }
+            
+            try {
+                const resetBtn = document.getElementById('resetDemoBtn');
+                const originalContent = resetBtn.innerHTML;
+                resetBtn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i>';
+                resetBtn.disabled = true;
+                
+                const response = await fetch('http://localhost:3001/api/demo-conversation-reset', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    console.log('✅ Reset démo réussi:', data);
+                    
+                    // Vider le chat dans l'interface
+                    const chatArea = document.getElementById('chatArea');
+                    chatArea.innerHTML = `
+                        <div class="flex justify-start mb-4 animate-fadeIn">
+                            <div class="flex items-start space-x-3 max-w-xs">
+                                <div class="w-8 h-8 bg-whatsapp rounded-full flex items-center justify-center flex-shrink-0">
+                                    <i data-lucide="bot" class="w-4 h-4 text-white"></i>
+                                </div>
+                                <div class="message-bubble-incoming rounded-lg p-3">
+                                    <p class="text-sm text-card-foreground">🔄 Démo resetée ! Bonjour ! Je suis l'assistant IA de démonstration. Envoyez-moi un message ou utilisez les scénarios pour commencer !</p>
+                                    <div class="text-xs text-muted-foreground mt-1">Maintenant</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Remettre l'état à jour
+                    updateStateDisplay('active');
+                    
+                    // Message de succès dans l'info
+                    const stateInfo = document.getElementById('stateInfo');
+                    const originalStateContent = stateInfo.innerHTML;
+                    stateInfo.innerHTML = `
+                        <div class="flex gap-2">
+                            <i data-lucide="check-circle" class="w-3.5 h-3.5 text-green-400 mt-0.5 flex-shrink-0"></i>
+                            <div class="leading-relaxed">
+                                <div class="font-medium text-green-400">🔄 Démo resetée avec succès !</div>
+                                <div class="text-green-300 text-xs mt-1">${data.deleted.messages} messages, ${data.deleted.priceOffers} offres supprimées</div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    setTimeout(() => {
+                        stateInfo.innerHTML = originalStateContent;
+                        lucide.createIcons();
+                    }, 3000);
+                    
+                    // Réinitialiser les icônes
+                    lucide.createIcons();
+                    
+                } else {
+                    console.error('❌ Erreur reset démo:', data.error);
+                    alert(`Erreur lors du reset: ${data.error}`);
+                }
+                
+            } catch (error) {
+                console.error('❌ Exception reset démo:', error);
+                alert(`Erreur lors du reset: ${error.message}`);
+            } finally {
+                const resetBtn = document.getElementById('resetDemoBtn');
+                resetBtn.innerHTML = '<i data-lucide="trash-2" class="w-3.5 h-3.5"></i>';
+                resetBtn.disabled = false;
+                lucide.createIcons();
+            }
+        }
+
+        // Initialisation
+        window.onload = () => {
+            messageInput.focus();
+            loadConversationState();
+            lucide.createIcons();
+        };
+    </script>
+</body>
+</html> 

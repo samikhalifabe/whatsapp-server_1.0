@@ -2,7 +2,7 @@ const { checkOpenAIConnection } = require('../services/openai');
 const { getAiConfig, updateAiConfig, generateAIResponseWithHistory } = require('../services/aiResponse');
 const logger = require('../utils/logger');
 
-// Endpoint to check OpenAI connection
+// Endpoint to check Grok connection (keeping OpenAI name for API compatibility)
 const getOpenAIStatus = async (req, res) => {
   try {
     const connectionTest = await checkOpenAIConnection();
@@ -20,7 +20,7 @@ const getOpenAIStatus = async (req, res) => {
       });
     }
   } catch (error) {
-    logger.error('Error checking OpenAI connection:', error);
+    logger.error('Error checking Grok connection:', error);
     res.status(500).json({
       status: 'error',
       message: 'Error checking connection',

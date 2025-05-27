@@ -73,11 +73,18 @@ async function handleIncomingMessage(msg, whatsappClient) {
     let detectedPrice = null;
     let priceDetectedMessageId = null;
 
+    // Check if this is a demo conversation (disable automatic state changes for demo)
+    const isDemoConversation = msg.from.includes('demo+33123456789');
+    
+    if (isDemoConversation) {
+      logger.info(`🎮 Mode démo détecté pour ${msg.from} - Changements d'état automatiques désactivés`);
+    }
+
     // Check for unavailability response
     if (isVehicleUnavailableResponse(msg.body)) {
       logger.info(`Message indisponibilité détecté de ${msg.from}`);
-    } else {
-       // Check for price offer
+    } else if (!isDemoConversation) {
+       // Check for price offer (only for non-demo conversations)
        const priceOfferCheck = detectPriceOffer(msg.body);
        const aiConfig = getAiConfig();
 
@@ -115,6 +122,22 @@ async function handleIncomingMessage(msg, whatsappClient) {
                logger.websocket.emit('price_offer_detected', `Offre de ${detectedPrice}${priceOfferCheck.currency}`);
            }
          }
+       }
+    } else {
+       // For demo conversations, still detect and log prices but don't change state
+       const priceOfferCheck = detectPriceOffer(msg.body);
+       if (priceOfferCheck.detected && priceOfferCheck.price) {
+         logger.info(`🎮 Mode démo - Prix détecté: ${priceOfferCheck.price} ${priceOfferCheck.currency} (sans changement d'état)`);
+         
+         // Still save the price offer for demo purposes
+         await createPriceOfferInDB(
+           conversationId,
+           currentVehicleId,
+           currentUserId,
+           savedMessage?.id,
+           priceOfferCheck.price,
+           priceOfferCheck.currency
+         );
        }
     }
 
