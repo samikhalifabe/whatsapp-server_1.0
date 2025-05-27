@@ -17,7 +17,3 @@ node_modules/
 # WhatsApp session files
 .wwebjs_auth/
 .wwebjs_cache/
-
-# Config files that might contain secrets
-config/*.json
-config/*.js
